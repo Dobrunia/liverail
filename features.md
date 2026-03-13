@@ -518,7 +518,7 @@
 
 ### 11.1 Root README
 
-- [ ] **Root README with package map and links**
+- [x] **Root README with package map and links**
       **Описание:** один общий README в корне репозитория, который кратко объясняет идею проекта и ведет в документацию конкретных пакетов.
       **Что делает:** дает обзор всего монорепо без дублирования подробной документации в корне.
       **Зачем нужна:** корневой README должен быть короткой входной точкой, а не свалкой всех деталей.
@@ -529,7 +529,7 @@
 
 ### 11.2 Package README generation model
 
-- [ ] **README generation model for `server` and `client` packages**
+- [x] **README generation model for `server` and `client` packages**
       **Описание:** единый подход, по которому README каждого пакета генерируется автоматически из публичного API и метаданных.
       **Что делает:** фиксирует, что README не пишется вручную и не попадает в рассинхрон с кодом.
       **Зачем нужна:** ты хочешь, чтобы документация была привязана к конкретному пакету и всегда отражала его реальное API.
@@ -540,7 +540,7 @@
 
 ### 11.3 Generated README for server package
 
-- [ ] **Generated README for `server` package**
+- [x] **Generated README for `server` package**
       **Описание:** автогенерируемый README для серверного пакета.
       **Что делает:** объясняет серверный runtime, adapters, context, policies, handlers и server-side best practices.
       **Зачем нужна:** серверная часть должна иметь свою самостоятельную документацию рядом с пакетом.
@@ -551,7 +551,7 @@
 
 ### 11.4 Generated README for client package
 
-- [ ] **Generated README for `client` package**
+- [x] **Generated README for `client` package**
       **Описание:** автогенерируемый README для клиентского пакета.
       **Что делает:** объясняет client runtime, command API, subscriptions, reconnect и event appliers.
       **Зачем нужна:** клиентская часть тоже должна иметь отдельную и понятную документацию.
@@ -562,7 +562,7 @@
 
 ### 11.5 Full API reference generation model
 
-- [ ] **LLM/API reference generation model**
+- [x] **LLM/API reference generation model**
       **Описание:** единый подход к генерации полного списка всего публичного API для каждого пакета в отдельный файл, пригодный для LLM.
       **Что делает:** задает вторую форму документации: не обзорную README, а полный справочник по API.
       **Зачем нужна:** LLM нужен не красивый README, а максимально полный и прямой список того, что реально можно использовать.
@@ -573,7 +573,7 @@
 
 ### 11.6 Generated full API reference for server package
 
-- [ ] **Generated full API reference for `server` package**
+- [x] **Generated full API reference for `server` package**
       **Описание:** полный автоматически сгенерированный список доступного публичного API серверного пакета.
       **Что делает:** дает LLM и разработчику полный перечень функций, типов и их назначения.
       **Зачем нужна:** это снижает шанс неправильного использования библиотеки моделью.
@@ -584,7 +584,7 @@
 
 ### 11.7 Generated full API reference for client package
 
-- [ ] **Generated full API reference for `client` package**
+- [x] **Generated full API reference for `client` package**
       **Описание:** полный автоматически сгенерированный список доступного публичного API клиентского пакета.
       **Что делает:** дает LLM и разработчику полный перечень клиентских entrypoints.
       **Зачем нужна:** клиентскую часть особенно важно сделать прозрачной для модели, потому что там много подписок и transport state.
@@ -595,7 +595,7 @@
 
 ### 11.8 Internal local script for README generation
 
-- [ ] **Local script for package README generation**
+- [x] **Local script for package README generation**
       **Описание:** внутренний скрипт репозитория, который генерирует README для `server` и `client`.
       **Что делает:** автоматизирует создание обзорной документации.
       **Зачем нужна:** README должен быть воспроизводимым и не поддерживаться руками.
@@ -606,7 +606,7 @@
 
 ### 11.9 Internal local script for full API reference generation
 
-- [ ] **Local script for full API reference generation**
+- [x] **Local script for full API reference generation**
       **Описание:** внутренний скрипт репозитория, который генерирует полное описание публичного API для `server` и `client`.
       **Что делает:** производит LLM-friendly файлы со всем доступным API.
       **Зачем нужна:** это твой второй тип документации, отдельный от README.
@@ -617,7 +617,7 @@
 
 ### 11.10 Documentation regeneration workflow
 
-- [ ] **Documentation regeneration workflow**
+- [x] **Documentation regeneration workflow**
       **Описание:** единый workflow обновления root README, package README и full API reference.
       **Что делает:** фиксирует, как именно документация обновляется при изменении API.
       **Зачем нужна:** без этого даже генераторы со временем начнут использоваться хаотично или забываться.

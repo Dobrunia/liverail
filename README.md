@@ -1,15 +1,29 @@
 # LiveRail
 
-Core entrypoints are transport-agnostic:
+## Overview
 
-```ts
-import { createClientRuntime } from "@liverail/client";
-import { createServerRuntime } from "@liverail/server";
-```
+LiveRail is a contract-driven realtime monorepo for web applications.
+It splits the system into a shared contract layer, a server runtime and a client runtime,
+so commands, events, channels and lifecycle behavior stay explicit and typed.
 
-Socket.IO adapters are published as dedicated subpath exports so main packages stay tree-shakable:
+## Package Map
 
-```ts
-import { createSocketIoClientTransport } from "@liverail/client/socket-io";
-import { createSocketIoServerAdapter } from "@liverail/server/socket-io";
-```
+| Package | Role | Status |
+| --- | --- | --- |
+| [@liverail/contracts](./packages/contracts) | Shared contracts, validation, errors and registry primitives | Shared foundation |
+| [@liverail/server](./packages/server) | Server runtime, policies, lifecycle hooks and transport adapters | Runtime package |
+| [@liverail/client](./packages/client) | Client runtime, subscriptions, reconnect flow and event appliers | Runtime package |
+
+## Quick Links
+
+- [Documentation Hub](./docs/README.md)
+- [Documentation Workflow](./docs/README.md#regeneration-workflow)
+- [Feature Plan](./features.md)
+- [Server Package](./packages/server)
+- [Client Package](./packages/client)
+- [Contracts Package](./packages/contracts)
+
+## Philosophy
+
+The root README stays intentionally short.
+Package-specific behavior, usage guides and generated API documentation live outside the repository root.

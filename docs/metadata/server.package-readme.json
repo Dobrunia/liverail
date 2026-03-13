@@ -1,0 +1,32 @@
+{
+  "packageName": "@liverail/server",
+  "title": "@liverail/server",
+  "summary": "Server runtime for contract-driven realtime applications.",
+  "sections": [
+    {
+      "id": "runtime",
+      "title": "Core Runtime",
+      "summary": "Create a typed server runtime around the contract registry."
+    },
+    {
+      "id": "context",
+      "title": "Connection Context",
+      "summary": "Inject request-specific context for handlers, policies and lifecycle hooks."
+    },
+    {
+      "id": "policies",
+      "title": "Policies and Handlers",
+      "summary": "Keep command, connection, join and receive decisions explicit and typed."
+    },
+    {
+      "id": "transports",
+      "title": "Transport Adapters",
+      "summary": "Expose transport-specific integrations through dedicated public subpath exports."
+    }
+  ],
+  "bestPractices": [
+    "Keep the root runtime transport-agnostic and wire adapters through explicit entrypoints.",
+    "Prefer context injection and policies over ad-hoc checks inside handlers.",
+    "Treat lifecycle hooks as operational extension points, not as a plugin system."
+  ]
+}

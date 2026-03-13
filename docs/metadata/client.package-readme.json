@@ -1,0 +1,32 @@
+{
+  "packageName": "@liverail/client",
+  "title": "@liverail/client",
+  "summary": "Client runtime for typed commands, subscriptions and reconnect-safe event flow.",
+  "sections": [
+    {
+      "id": "runtime",
+      "title": "Client Runtime",
+      "summary": "Create a typed client runtime around the shared contract registry."
+    },
+    {
+      "id": "commands",
+      "title": "Command API",
+      "summary": "Execute commands with validation, timeout handling and normalized failures."
+    },
+    {
+      "id": "subscriptions",
+      "title": "Subscriptions and Events",
+      "summary": "Subscribe to channel instances and handle validated inbound events."
+    },
+    {
+      "id": "state",
+      "title": "Reconnect and State Updates",
+      "summary": "Keep subscriptions and event appliers stable across reconnect and transport changes."
+    }
+  ],
+  "bestPractices": [
+    "Build the runtime from contracts first and then plug in a transport implementation.",
+    "Use event appliers for state transitions before listener-specific side effects.",
+    "Listen to lifecycle and system events instead of inferring transport state manually."
+  ]
+}

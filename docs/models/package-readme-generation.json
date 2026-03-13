@@ -1,0 +1,37 @@
+{
+  "kind": "package-readme-generation-model",
+  "version": 1,
+  "sources": {
+    "publicApi": "package-exports",
+    "types": "entrypoint-jsdoc",
+    "metadata": "docs-metadata"
+  },
+  "packages": {
+    "@liverail/server": {
+      "packageJsonPath": "packages/server/package.json",
+      "outputPath": "packages/server/README.md",
+      "sourceEntrypoints": [
+        "packages/server/src/index.ts",
+        "packages/server/src/socket-io-entry.ts"
+      ],
+      "entryExportPaths": [
+        ".",
+        "./socket-io"
+      ],
+      "metadataPath": "docs/metadata/server.package-readme.json"
+    },
+    "@liverail/client": {
+      "packageJsonPath": "packages/client/package.json",
+      "outputPath": "packages/client/README.md",
+      "sourceEntrypoints": [
+        "packages/client/src/index.ts",
+        "packages/client/src/socket-io-entry.ts"
+      ],
+      "entryExportPaths": [
+        ".",
+        "./socket-io"
+      ],
+      "metadataPath": "docs/metadata/client.package-readme.json"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "packageName": "@liverail/server",
+  "title": "@liverail/server API Reference",
+  "summary": "Full public API reference for the server runtime and its official subpath exports.",
+  "groups": [
+    {
+      "id": "runtime",
+      "title": "Core Runtime Exports",
+      "entryExportPath": "."
+    },
+    {
+      "id": "socket-io",
+      "title": "Socket.IO Entry Point",
+      "entryExportPath": "./socket-io"
+    }
+  ]
+}

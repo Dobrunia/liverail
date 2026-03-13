@@ -1,0 +1,50 @@
+{
+  "kind": "full-api-reference-generation-model",
+  "version": 1,
+  "sources": {
+    "publicApi": "package-exports",
+    "types": "entrypoint-jsdoc",
+    "metadata": "docs-metadata"
+  },
+  "format": {
+    "style": "llm-friendly-markdown",
+    "include": [
+      "functions",
+      "types",
+      "subpath-exports"
+    ],
+    "exclude": [
+      "internal-files",
+      "tests",
+      "types-directories"
+    ]
+  },
+  "packages": {
+    "@liverail/server": {
+      "packageJsonPath": "packages/server/package.json",
+      "outputPath": "docs/api/server.md",
+      "sourceEntrypoints": [
+        "packages/server/src/index.ts",
+        "packages/server/src/socket-io-entry.ts"
+      ],
+      "entryExportPaths": [
+        ".",
+        "./socket-io"
+      ],
+      "metadataPath": "docs/metadata/server.api-reference.json"
+    },
+    "@liverail/client": {
+      "packageJsonPath": "packages/client/package.json",
+      "outputPath": "docs/api/client.md",
+      "sourceEntrypoints": [
+        "packages/client/src/index.ts",
+        "packages/client/src/socket-io-entry.ts"
+      ],
+      "entryExportPaths": [
+        ".",
+        "./socket-io"
+      ],
+      "metadataPath": "docs/metadata/client.api-reference.json"
+    }
+  }
+}

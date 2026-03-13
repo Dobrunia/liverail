@@ -8,6 +8,9 @@
   "scripts": {
     "clean:dist": "node ./scripts/clean-dist.mjs",
     "build": "npm run clean:dist && tsc -p packages/contracts/tsconfig.build.json && tsc -p packages/server/tsconfig.build.json && tsc -p packages/client/tsconfig.build.json",
+    "docs:readmes": "node ./scripts/generate-package-readmes.mjs",
+    "docs:api": "node ./scripts/generate-api-references.mjs",
+    "docs:generate": "npm run docs:readmes && npm run docs:api",
     "typecheck": "tsc -p packages/contracts/tsconfig.json --noEmit && tsc -p packages/server/tsconfig.json --noEmit && tsc -p packages/client/tsconfig.json --noEmit",
     "test": "vitest run --config ./vitest.config.ts"
   },
