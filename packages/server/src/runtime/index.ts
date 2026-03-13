@@ -12,10 +12,17 @@ import type {
   CommandAck,
   CommandInput,
   CommandContract,
+  CommandPolicyContract,
+  ConnectPolicyContract,
   ContractRegistry,
   EventContract,
   EventPayload,
+  JoinPolicyContract,
+  PolicyDenyDecision,
   PolicyContract,
+  PolicyResolution,
+  RealtimeErrorCode,
+  ReceivePolicyContract,
   ResolveSchemaInput
 } from "@liverail/contracts";
 
@@ -41,6 +48,16 @@ export interface CreateServerRuntimeOptions<
   readonly registry: TRegistry;
 
   /**
+   * Typed policy-набор для connection access layer.
+   */
+  readonly connectionPolicies?: ServerConnectionPolicies<TRuntimeContext>;
+
+  /**
+   * Typed policy-набор для command access layer.
+   */
+  readonly commandPolicies?: ServerCommandPolicies<TRegistry, TRuntimeContext>;
+
+  /**
    * Typed command handler-ы, через которые runtime исполняет команды.
    */
   readonly commandHandlers?: ServerCommandHandlers<TRegistry, TRuntimeContext>;
@@ -59,9 +76,25 @@ export interface CreateServerRuntimeOptions<
   readonly eventRouters?: ServerEventRouters<TRegistry, TRuntimeContext>;
 
   /**
+   * Typed receive policy-набор для event delivery layer.
+   */
+  readonly eventReceivePolicies?: ServerEventReceivePolicies<
+    TRegistry,
+    TRuntimeContext
+  >;
+
+  /**
    * Typed deliverer-ы server events.
    */
   readonly eventDeliverers?: ServerEventDeliverers<TRegistry, TRuntimeContext>;
+
+  /**
+   * Typed authorizer-ы join-операций для channel membership runtime.
+   */
+  readonly channelJoinPolicies?: ServerChannelJoinPolicies<
+    TRegistry,
+    TRuntimeContext
+  >;
 
   /**
    * Typed authorizer-ы join-операций для channel membership runtime.
@@ -84,6 +117,13 @@ export interface ServerRuntime<
    * Явный registry-контрактов, используемый всеми следующими pipeline-слоями.
    */
   readonly registry: TRegistry;
+
+  /**
+   * Централизованно авторизует новое подключение через connect policy layer.
+   */
+  authorizeConnection(
+    options: ExecuteServerConnectionOptions<TRuntimeContext>
+  ): Promise<void>;
 
   /**
    * Разрешает command-контракт по имени.
@@ -201,6 +241,20 @@ export interface ServerCommandExecution<
 }
 
 /**
+ * Набор command policy-контрактов, зарегистрированных в runtime по command name.
+ */
+export type ServerCommandPolicies<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> = Partial<{
+  readonly [TName in CommandName<TRegistry>]: readonly CommandPolicyContract<
+    string,
+    TRegistry["commands"]["byName"][TName],
+    TRuntimeContext
+  >[];
+}>;
+
+/**
  * Typed handler команды внутри server runtime.
  */
 export type ServerCommandHandler<
@@ -245,6 +299,22 @@ export type ServerCommandAuthorizers<
     TRuntimeContext
   >;
 }>;
+
+/**
+ * Набор connect policy, подключенных к runtime.
+ */
+export type ServerConnectionPolicies<TRuntimeContext = unknown> =
+  readonly ConnectPolicyContract<string, TRuntimeContext, any>[];
+
+/**
+ * Параметры connection authorization в runtime.
+ */
+export interface ExecuteServerConnectionOptions<TRuntimeContext = unknown> {
+  /**
+   * Runtime-контекст нового подключения.
+   */
+  readonly context: TRuntimeContext;
+}
 
 /**
  * Параметры выполнения конкретного command pipeline.
@@ -359,6 +429,21 @@ export type ServerEventDeliverers<
 }>;
 
 /**
+ * Набор receive policy-контрактов, зарегистрированных в runtime по event name.
+ */
+export type ServerEventReceivePolicies<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> = Partial<{
+  readonly [TName in EventName<TRegistry>]: readonly ReceivePolicyContract<
+    string,
+    TRegistry["events"]["byName"][TName],
+    TRuntimeContext,
+    ServerEventRoute
+  >[];
+}>;
+
+/**
  * Параметры выполнения конкретного event emission pipeline.
  */
 export interface ExecuteServerEventOptions<TRuntimeContext = unknown> {
@@ -408,6 +493,20 @@ export interface ChannelMembership<
   TChannel extends ChannelContract = ChannelContract,
   TRuntimeContext = unknown
 > extends ServerChannelJoinExecution<TChannel, TRuntimeContext> {}
+
+/**
+ * Набор join policy-контрактов, зарегистрированных в runtime по channel name.
+ */
+export type ServerChannelJoinPolicies<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> = Partial<{
+  readonly [TName in ChannelName<TRegistry>]: readonly JoinPolicyContract<
+    string,
+    TRegistry["channels"]["byName"][TName],
+    TRuntimeContext
+  >[];
+}>;
 
 /**
  * Authorizer typed join-операции для channel membership runtime.
@@ -471,10 +570,14 @@ export function createServerRuntime<
   }
 
   const { registry } = options;
+  const connectionPolicies = options.connectionPolicies ?? [];
+  const commandPolicies = options.commandPolicies ?? {};
   const commandHandlers = options.commandHandlers ?? {};
   const commandAuthorizers = options.commandAuthorizers ?? {};
   const eventRouters = options.eventRouters ?? {};
+  const eventReceivePolicies = options.eventReceivePolicies ?? {};
   const eventDeliverers = options.eventDeliverers ?? {};
+  const channelJoinPolicies = options.channelJoinPolicies ?? {};
   const channelJoinAuthorizers = options.channelJoinAuthorizers ?? {};
   const channelMemberships = new Map<
     string,
@@ -483,6 +586,31 @@ export function createServerRuntime<
 
   return Object.freeze({
     registry,
+    async authorizeConnection(
+      executionOptions: ExecuteServerConnectionOptions<TRuntimeContext>
+    ) {
+      if (executionOptions === undefined) {
+        throw new TypeError("Connection authorization requires runtime options.");
+      }
+
+      for (const contract of connectionPolicies) {
+        const policyError = await evaluatePolicyContract(
+          contract,
+          {
+            context: executionOptions.context
+          },
+          {
+            defaultCode: "connection-denied",
+            defaultMessage: `Connection is denied by policy: "${contract.name}".`,
+            stage: "connect"
+          }
+        );
+
+        if (policyError !== undefined) {
+          throw policyError;
+        }
+      }
+    },
     resolveCommand(name: string) {
       return registry.commands.byName[
         name as keyof typeof registry.commands.byName
@@ -535,11 +663,38 @@ export function createServerRuntime<
         input: parsedInput,
         context: executionOptions.context
       } as ServerCommandExecution<CommandContract, TRuntimeContext>;
+      const policies = commandPolicies[
+        name as keyof typeof commandPolicies
+      ] as
+        | readonly CommandPolicyContract<
+            string,
+            CommandContract,
+            TRuntimeContext
+          >[]
+        | undefined;
       const authorizer = commandAuthorizers[
         name as keyof typeof commandAuthorizers
       ] as
         | ServerCommandAuthorizer<CommandContract, TRuntimeContext>
         | undefined;
+
+      if (policies !== undefined) {
+        for (const policy of policies) {
+          const policyError = await evaluatePolicyContract(
+            policy,
+            execution,
+            {
+              defaultCode: "forbidden",
+              defaultMessage: `Command execution is denied by policy: "${policy.name}".`,
+              stage: "command"
+            }
+          );
+
+          if (policyError !== undefined) {
+            throw policyError;
+          }
+        }
+      }
 
       if (authorizer !== undefined) {
         try {
@@ -596,6 +751,16 @@ export function createServerRuntime<
       const deliverer = eventDeliverers[
         name as keyof typeof eventDeliverers
       ] as ServerEventDeliverer<EventContract, TRuntimeContext> | undefined;
+      const receivePolicies = eventReceivePolicies[
+        name as keyof typeof eventReceivePolicies
+      ] as
+        | readonly ReceivePolicyContract<
+            string,
+            EventContract,
+            TRuntimeContext,
+            ServerEventRoute
+          >[]
+        | undefined;
 
       if (deliverer === undefined) {
         throw new TypeError(`No event deliverer registered for event: ${name}.`);
@@ -627,6 +792,27 @@ export function createServerRuntime<
           ...emission,
           route
         } as ServerEventDelivery<EventContract, TRuntimeContext>;
+
+        if (receivePolicies !== undefined) {
+          let isDenied = false;
+
+          for (const policy of receivePolicies) {
+            try {
+              const result = await policy.evaluate(delivery);
+
+              if (!isPolicyAllowed(result)) {
+                isDenied = true;
+                break;
+              }
+            } catch (error) {
+              throw normalizePolicyEvaluationError(error, policy.name, "receive");
+            }
+          }
+
+          if (isDenied) {
+            continue;
+          }
+        }
 
         try {
           await deliverer(delivery);
@@ -667,11 +853,38 @@ export function createServerRuntime<
         memberId: executionOptions.memberId,
         context: executionOptions.context
       } as ServerChannelJoinExecution<ChannelContract, TRuntimeContext>;
+      const joinPolicies = channelJoinPolicies[
+        name as keyof typeof channelJoinPolicies
+      ] as
+        | readonly JoinPolicyContract<
+            string,
+            ChannelContract,
+            TRuntimeContext
+          >[]
+        | undefined;
       const authorizer = channelJoinAuthorizers[
         name as keyof typeof channelJoinAuthorizers
       ] as
         | ServerChannelJoinAuthorizer<ChannelContract, TRuntimeContext>
         | undefined;
+
+      if (joinPolicies !== undefined) {
+        for (const policy of joinPolicies) {
+          const policyError = await evaluatePolicyContract(
+            policy,
+            joinExecution,
+            {
+              defaultCode: "join-denied",
+              defaultMessage: `Channel join is denied by policy: "${policy.name}".`,
+              stage: "join"
+            }
+          );
+
+          if (policyError !== undefined) {
+            throw policyError;
+          }
+        }
+      }
 
       if (authorizer !== undefined) {
         try {
@@ -836,4 +1049,105 @@ function getChannelMembershipBucketKey(
   key: ChannelKey<ChannelContract>
 ): string {
   return `${channelName}:${JSON.stringify(key)}`;
+}
+
+/**
+ * Выполняет policy-контракт и возвращает нормализованную realtime-ошибку,
+ * если правило явно отклонило операцию или упало во время вычисления.
+ */
+async function evaluatePolicyContract<
+  TContext,
+  TCode extends RealtimeErrorCode
+>(
+  contract: PolicyContract<string, TContext, any, TCode>,
+  context: TContext,
+  options: {
+    readonly defaultCode: TCode;
+    readonly defaultMessage: string;
+    readonly stage: "connect" | "join" | "command" | "receive";
+  }
+) {
+  try {
+    const result = await contract.evaluate(context);
+
+    return createPolicyRejectionError(
+      result,
+      options.defaultCode,
+      options.defaultMessage
+    );
+  } catch (error) {
+    return normalizePolicyEvaluationError(error, contract.name, options.stage);
+  }
+}
+
+/**
+ * Превращает deny-результат policy в единый realtime error shape.
+ */
+function createPolicyRejectionError<TCode extends RealtimeErrorCode>(
+  result: PolicyResolution<TCode>,
+  defaultCode: TCode,
+  defaultMessage: string
+) {
+  if (isPolicyAllowed(result)) {
+    return undefined;
+  }
+
+  if (isPolicyDenyDecision(result)) {
+    const errorOptions = {
+      code: result.code ?? defaultCode,
+      message: result.message ?? defaultMessage,
+      cause: result
+    };
+
+    if (result.details !== undefined) {
+      return createRealtimeError({
+        ...errorOptions,
+        details: result.details
+      });
+    }
+
+    return createRealtimeError(errorOptions);
+  }
+
+  return createRealtimeError({
+    code: defaultCode,
+    message: defaultMessage
+  });
+}
+
+/**
+ * Нормализует исключение из policy evaluator в предсказуемый internal-error.
+ */
+function normalizePolicyEvaluationError(
+  error: unknown,
+  policyName: string,
+  stage: "connect" | "join" | "command" | "receive"
+) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Policy evaluation failed at stage "${stage}": "${policyName}".`,
+    details: {
+      policyName,
+      stage
+    },
+    cause: error
+  });
+}
+
+function isPolicyAllowed(result: PolicyResolution<RealtimeErrorCode>): boolean {
+  if (typeof result === "boolean") {
+    return result;
+  }
+
+  return result.allowed;
+}
+
+function isPolicyDenyDecision(
+  result: PolicyResolution<RealtimeErrorCode>
+): result is PolicyDenyDecision<RealtimeErrorCode> {
+  return typeof result === "object" && result !== null && result.allowed === false;
 }

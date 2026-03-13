@@ -159,7 +159,7 @@
 ## 5. Policy Layer
 
 ### 5.1 Policy primitives
-- [ ] **Realtime policy primitives**
+- [x] **Realtime policy primitives**
   **Описание:** базовые policy для connect, join, command, receive.
   **Что делает:** задает единый язык прав доступа.
   **Зачем нужна:** доступ нельзя размазывать по handlers.
@@ -169,7 +169,7 @@
   **Почему здесь:** сначала нужна сама модель policy.
 
 ### 5.2 Policy composition
-- [ ] **Policy composition helpers**
+- [x] **Policy composition helpers**
   **Описание:** `and/or/not` для правил доступа.
   **Что делает:** позволяет собирать сложные проверки из простых.
   **Зачем нужна:** без этого начнется копипаста.
@@ -179,7 +179,7 @@
   **Почему здесь:** это естественное развитие policy model.
 
 ### 5.3 Connection policy enforcement
-- [ ] **Connection policy enforcement**
+- [x] **Connection policy enforcement**
   **Описание:** проверка доступа на подключение.
   **Что делает:** не дает неподходящему клиенту открыть realtime session.
   **Зачем нужна:** это первый защитный слой.
@@ -189,7 +189,7 @@
   **Почему здесь:** connect — самая ранняя точка доступа.
 
 ### 5.4 Join policy enforcement
-- [ ] **Join policy enforcement**
+- [x] **Join policy enforcement**
   **Описание:** проверка доступа на вход в канал/комнату.
   **Что делает:** не дает слушать канал без нужных прав.
   **Зачем нужна:** это обязательный слой для rooms/channels.
@@ -199,7 +199,7 @@
   **Почему здесь:** join идет после connect.
 
 ### 5.5 Command policy enforcement
-- [ ] **Command policy enforcement**
+- [x] **Command policy enforcement**
   **Описание:** проверка доступа на выполнение команды.
   **Что делает:** не дает вызывать команды без разрешения.
   **Зачем нужна:** это основной command-level security слой.
@@ -209,7 +209,7 @@
   **Почему здесь:** идет после того, как есть готовый pipeline и базовые policies.
 
 ### 5.6 Receive policy enforcement
-- [ ] **Receive policy enforcement**
+- [x] **Receive policy enforcement**
   **Описание:** проверка права клиента получить событие.
   **Что делает:** не дает событиям утекать подписчикам, которым они не положены.
   **Зачем нужна:** join в канал и право получать конкретное событие — не всегда одно и то же.

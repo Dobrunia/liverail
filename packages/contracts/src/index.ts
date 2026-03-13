@@ -66,13 +66,45 @@ export type {
   ChannelOptions
 } from "./channel/index.ts";
 
-export { policy } from "./policy/index.ts";
+export {
+  POLICY_SCOPES,
+  andPolicy,
+  commandPolicy,
+  connectPolicy,
+  joinPolicy,
+  notPolicy,
+  orPolicy,
+  policy,
+  receivePolicy
+} from "./policy/index.ts";
 export type {
+  CommandPolicyContext,
+  CommandPolicyContract,
+  CommandPolicyErrorCode,
+  CommandPolicyOptions,
+  ConnectPolicyContext,
+  ConnectPolicyContract,
+  ConnectPolicyErrorCode,
+  ConnectPolicyOptions,
+  JoinPolicyContext,
+  JoinPolicyContract,
+  JoinPolicyErrorCode,
+  JoinPolicyOptions,
+  PolicyAllowDecision,
+  PolicyCompositionOptions,
   PolicyContext,
+  PolicyDecision,
+  PolicyDenyDecision,
   PolicyContract,
   PolicyEvaluator,
   PolicyOptions,
-  PolicyResult
+  PolicyResolution,
+  PolicyResult,
+  PolicyScope,
+  ReceivePolicyContext,
+  ReceivePolicyContract,
+  ReceivePolicyErrorCode,
+  ReceivePolicyOptions
 } from "./policy/index.ts";
 
 export { createContractRegistry } from "./registry/index.ts";
