@@ -3,7 +3,7 @@
 ## 1. Foundation
 
 ### 1.1 Contract primitives
-- [ ] **Contract primitives: `command`, `event`, `channel`, `policy`**
+- [x] **Contract primitives: `command`, `event`, `channel`, `policy`**
   **Описание:** базовые фабрики и базовые сущности библиотеки.
   **Что делает:** задает единый язык описания realtime-системы.
   **Зачем нужна:** без этого нельзя строить ни сервер, ни клиент, ни transport layer.
@@ -13,7 +13,7 @@
   **Почему здесь:** это абсолютный фундамент.
 
 ### 1.2 Shared runtime and contract types
-- [ ] **Shared type system for contracts and runtime context**
+- [x] **Shared type system for contracts and runtime context**
   **Описание:** общие TypeScript-типы для command/event/channel/policy и контекста исполнения.
   **Что делает:** фиксирует shape всех сущностей и связывает пакеты между собой.
   **Зачем нужна:** иначе дальше начнут расходиться типы между `contracts`, `server` и `client`.
@@ -23,7 +23,7 @@
   **Почему здесь:** сразу после primitives нужно зафиксировать общий язык типов.
 
 ### 1.3 Contract registry
-- [ ] **Contract registry model**
+- [x] **Contract registry model**
   **Описание:** единая модель хранения зарегистрированных commands/events/channels.
   **Что делает:** превращает отдельные контракты в связную систему.
   **Зачем нужна:** без registry нельзя строить runtime, export, tooling и интеграции.
@@ -37,7 +37,7 @@
 ## 2. Validation Layer
 
 ### 2.1 Schema validation base
-- [ ] **Schema-based validation for payloads and keys**
+- [x] **Schema-based validation for payloads and keys**
   **Описание:** общая валидация схем через Zod для command input, event payload и channel key.
   **Что делает:** не дает данным “плавать” между клиентом и сервером.
   **Зачем нужна:** это базовый anti-chaos слой.
@@ -47,7 +47,7 @@
   **Почему здесь:** validation нужна до runtime.
 
 ### 2.2 Command contracts
-- [ ] **Command input and ack contracts**
+- [x] **Command input and ack contracts**
   **Описание:** строгие схемы для входа команды и ее ack-ответа.
   **Что делает:** формализует client → server действие и server → client подтверждение.
   **Зачем нужна:** без этого команда быстро превращается в нестрогий `emit`.
@@ -57,7 +57,7 @@
   **Почему здесь:** command — одна из центральных сущностей.
 
 ### 2.3 Event contracts
-- [ ] **Event payload contracts**
+- [x] **Event payload contracts**
   **Описание:** строгие схемы server-to-client событий.
   **Что делает:** фиксирует, какие события существуют и какой у них payload.
   **Зачем нужна:** без этого нет строгого realtime-слоя.
@@ -67,7 +67,7 @@
   **Почему здесь:** event contracts нужны раньше transport и client listeners.
 
 ### 2.4 Channel contracts
-- [ ] **Channel key contracts**
+- [x] **Channel key contracts**
   **Описание:** строгая модель channel key, например `voice-room({ roomId })`.
   **Что делает:** убирает хаос из room names и адресации подписок.
   **Зачем нужна:** без этого комнаты быстро становятся набором строк.
@@ -81,7 +81,7 @@
 ## 3. Error Model
 
 ### 3.1 Unified realtime error model
-- [ ] **Unified realtime error model**
+- [x] **Unified realtime error model**
   **Описание:** единый список кодов ошибок и единый shape ошибки для всей библиотеки.
   **Что делает:** делает поведение системы предсказуемым и для клиента, и для LLM.
   **Зачем нужна:** если error model не сделать сейчас, потом новые слои будут добавлять ошибки хаотично.
@@ -101,7 +101,7 @@
   **Почему здесь:** чтобы потом не забыть внести security/delivery ошибки в общий список.
 
 ### 3.2 Validation error normalization
-- [ ] **Validation error normalization**
+- [x] **Validation error normalization**
   **Описание:** единая нормализация ошибок схем и payload.
   **Что делает:** превращает Zod/runtime ошибки в стабильный realtime error shape.
   **Зачем нужна:** validation уже есть, теперь нужен единый внешний формат.
@@ -115,7 +115,7 @@
 ## 4. Server Runtime
 
 ### 4.1 Server runtime core
-- [ ] **Server runtime core**
+- [x] **Server runtime core**
   **Описание:** базовый серверный runtime, который знает про registry и умеет исполнять контракты.
   **Что делает:** становится центральной точкой server-side логики.
   **Зачем нужна:** без него все дальше будет набором helper-ов без общей архитектуры.
@@ -125,7 +125,7 @@
   **Почему здесь:** это фундамент серверной части.
 
 ### 4.2 Command execution pipeline
-- [ ] **Command execution pipeline**
+- [x] **Command execution pipeline**
   **Описание:** pipeline выполнения команды: validate input → auth/policy → handle → validate ack → normalize errors.
   **Что делает:** делает исполнение команд единообразным.
   **Зачем нужна:** это центр серверной логики.
@@ -135,7 +135,7 @@
   **Почему здесь:** command flow — первый важный исполняемый путь.
 
 ### 4.3 Event emission pipeline
-- [ ] **Event emission pipeline**
+- [x] **Event emission pipeline**
   **Описание:** pipeline отправки события: validate payload → route → deliver.
   **Что делает:** централизует server push.
   **Зачем нужна:** иначе события будут эмититься хаотично.
@@ -145,7 +145,7 @@
   **Почему здесь:** после команд нужен единый event flow.
 
 ### 4.4 Channel membership runtime
-- [ ] **Channel membership runtime**
+- [x] **Channel membership runtime**
   **Описание:** join/leave логика и хранение membership на сервере.
   **Что делает:** управляет составом каналов/комнат.
   **Зачем нужна:** без membership нет реального realtime по rooms.
