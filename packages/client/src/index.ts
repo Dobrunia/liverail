@@ -5,8 +5,17 @@ export type {
   ExecuteClientCommandOptions
 } from "./runtime/index.ts";
 
+export {
+  applyEventApplier,
+  eventApplier
+} from "./appliers/index.ts";
 export type { ClientEventListener } from "./events/index.ts";
 export type { ClientRuntimeErrorHandler } from "./errors/index.ts";
+export type {
+  ClientEventApplier,
+  ClientEventApplierDefinition,
+  ClientStateStore
+} from "./appliers/index.ts";
 export type { ClientChannelSubscription } from "./subscriptions/index.ts";
 
 export type {

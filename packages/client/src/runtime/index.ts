@@ -6,6 +6,7 @@ import type {
   CommandResult,
   ContractRegistry,
   EventContract,
+  EventPayload,
   ResolveSchemaInput
 } from "@liverail/contracts";
 import {
@@ -21,6 +22,10 @@ import {
   reportClientRuntimeError,
   type ClientRuntimeErrorHandler
 } from "../errors/index.ts";
+import type {
+  ClientEventApplierDefinition,
+  ClientStateStore
+} from "../appliers/index.ts";
 import type {
   ClientChannelSubscription,
 } from "../subscriptions/index.ts";
@@ -140,9 +145,38 @@ export interface ClientRuntime<
   ): () => void;
 
   /**
+   * Регистрирует typed event applier по event contract и store-agnostic state accessor.
+   */
+  registerEventApplier<
+    TName extends EventName<TRegistry>,
+    TState
+  >(
+    applier: ClientEventApplierDefinition<
+      TRegistry["events"]["byName"][TName],
+      TState
+    >,
+    stateStore: ClientStateStore<TState>
+  ): () => void;
+
+  /**
    * Завершает transport binding и освобождает локальные ресурсы runtime.
    */
   destroy(): void;
+}
+
+/**
+ * Внутренняя runtime-запись зарегистрированного event applier.
+ */
+interface RegisteredClientEventApplier {
+  /**
+   * Имя события, к которому привязан applier.
+   */
+  readonly eventName: string;
+
+  /**
+   * Применяет уже провалидированный payload к пользовательскому состоянию.
+   */
+  readonly apply: (payload: unknown) => void;
 }
 
 /**
@@ -175,12 +209,14 @@ export function createClientRuntime<
     string,
     ClientChannelSubscription<ChannelContract>
   >();
+  const eventAppliers = new Map<string, Set<RegisteredClientEventApplier>>();
   const eventListeners = new Map<
     string,
     Set<ClientEventListener<EventContract>>
   >();
   const transportEventReceiver = createTransportEventReceiver(
     registry,
+    eventAppliers,
     eventListeners,
     onError
   );
@@ -402,12 +438,67 @@ export function createClientRuntime<
         }
       };
     },
+    registerEventApplier<
+      TName extends EventName<TRegistry>,
+      TState
+    >(
+      applier: ClientEventApplierDefinition<
+        TRegistry["events"]["byName"][TName],
+        TState
+      >,
+      stateStore: ClientStateStore<TState>
+    ) {
+      const contract = registry.events.byName[
+        applier.event.name as keyof typeof registry.events.byName
+      ] as TRegistry["events"]["byName"][TName] | undefined;
+
+      if (contract === undefined || contract !== applier.event) {
+        throw new TypeError(
+          `Event applier must use an event contract from the client registry: "${applier.event.name}".`
+        );
+      }
+
+      const registration = {
+        eventName: contract.name,
+        apply(payload: unknown) {
+          const nextState = applier.apply(
+            stateStore.getState(),
+            payload as EventPayload<TRegistry["events"]["byName"][TName]>
+          );
+
+          stateStore.setState(nextState);
+        }
+      } satisfies RegisteredClientEventApplier;
+      let bucket = eventAppliers.get(contract.name);
+
+      if (bucket === undefined) {
+        bucket = new Set();
+        eventAppliers.set(contract.name, bucket);
+      }
+
+      bucket.add(registration);
+
+      return () => {
+        const currentBucket = eventAppliers.get(contract.name);
+
+        if (currentBucket === undefined) {
+          return;
+        }
+
+        currentBucket.delete(registration);
+
+        if (currentBucket.size === 0) {
+          eventAppliers.delete(contract.name);
+        }
+      };
+    },
     destroy() {
       if (isDestroyed) {
         return;
       }
 
       isDestroyed = true;
+      eventAppliers.clear();
       eventListeners.clear();
       channelSubscriptions.clear();
       unbindTransportConnection?.();
@@ -478,6 +569,7 @@ function createTransportConnectionReceiver(
  */
 function createTransportEventReceiver(
   registry: ContractRegistry,
+  eventAppliers: Map<string, Set<RegisteredClientEventApplier>>,
   eventListeners: Map<string, Set<ClientEventListener<EventContract>>>,
   onError: ClientRuntimeErrorHandler | undefined
 ): ClientTransportEventReceiver {
@@ -504,6 +596,25 @@ function createTransportEventReceiver(
     }
 
     const bucket = eventListeners.get(contract.name);
+    const applierBucket = eventAppliers.get(contract.name);
+
+    if (applierBucket !== undefined) {
+      for (const applier of [...applierBucket]) {
+        try {
+          applier.apply(payload);
+        } catch (error) {
+          if (isRealtimeError(error)) {
+            reportClientRuntimeError(error, onError);
+            continue;
+          }
+
+          reportClientRuntimeError(
+            normalizeClientEventApplierError(error, contract.name),
+            onError
+          );
+        }
+      }
+    }
 
     if (bucket === undefined) {
       return;
@@ -600,6 +711,24 @@ function normalizeClientChannelTransportError(
     details: {
       channelName,
       stage
+    },
+    cause: error
+  });
+}
+
+/**
+ * Нормализует ошибку event applier registration/runtime слоя в общий realtime error.
+ */
+function normalizeClientEventApplierError(
+  error: unknown,
+  eventName: string
+) {
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Client event applier failed at stage "apply": "${eventName}".`,
+    details: {
+      eventName,
+      stage: "apply"
     },
     cause: error
   });
