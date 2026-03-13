@@ -229,9 +229,19 @@ function bindSocketIoConnectionLifecycle(
   socket: SocketIoClientSocket,
   receiver: ClientTransportConnectionReceiver
 ): () => void {
+  const onConnecting = () => {
+    receiver({
+      status: "connecting"
+    });
+  };
   const onConnect = () => {
     receiver({
       status: "connected"
+    });
+  };
+  const onReconnectAttempt = () => {
+    receiver({
+      status: "reconnecting"
     });
   };
   const onDisconnect = () => {
@@ -239,17 +249,29 @@ function bindSocketIoConnectionLifecycle(
       status: "disconnected"
     });
   };
+  const onConnectError = (error: unknown) => {
+    receiver({
+      status: "failed",
+      error
+    });
+  };
 
   socket.on("connect", onConnect);
+  socket.on("reconnect_attempt", onReconnectAttempt);
   socket.on("disconnect", onDisconnect);
+  socket.on("connect_error", onConnectError);
 
   if (socket.connected) {
     onConnect();
+  } else {
+    onConnecting();
   }
 
   return () => {
     socket.off("connect", onConnect);
+    socket.off("reconnect_attempt", onReconnectAttempt);
     socket.off("disconnect", onDisconnect);
+    socket.off("connect_error", onConnectError);
   };
 }
 

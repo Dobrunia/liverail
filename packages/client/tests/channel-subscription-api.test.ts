@@ -56,7 +56,8 @@ test("should subscribe and unsubscribe channels through typed contracts", async 
     name: "voice-room",
     key: {
       roomId: "room-1"
-    }
+    },
+    id: 'voice-room:{"roomId":"room-1"}'
   });
   assert.equal(firstUnsubscribe, true);
   assert.equal(secondUnsubscribe, false);

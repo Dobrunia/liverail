@@ -1,4 +1,8 @@
-import type { ChannelContract, ChannelKey } from "@liverail/contracts";
+import {
+  stringifyChannelInstance,
+  type ChannelContract,
+  type ChannelKey
+} from "@liverail/contracts";
 
 /**
  * Активная клиентская подписка на конкретный channel instance.
@@ -20,6 +24,11 @@ export interface ClientChannelSubscription<
    * Нормализованный ключ конкретного channel instance.
    */
   readonly key: ChannelKey<TChannel>;
+
+  /**
+   * Канонический идентификатор конкретного channel instance.
+   */
+  readonly id: string;
 }
 
 /**
@@ -29,5 +38,5 @@ export function getClientChannelSubscriptionKey(
   channelName: string,
   key: ChannelKey<ChannelContract>
 ): string {
-  return `${channelName}:${JSON.stringify(key)}`;
+  return stringifyChannelInstance(channelName, key);
 }

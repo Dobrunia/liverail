@@ -1,6 +1,8 @@
 import {
+  createChannelInstance,
   createRealtimeError,
   isRealtimeError,
+  stringifyChannelInstance,
   type ContractMetadata,
   type CommandResult,
   type ContractRegistry,
@@ -13,6 +15,7 @@ import type {
   ServerEventRoute,
   ServerRuntime
 } from "../runtime/index.ts";
+import { SERVER_RUNTIME_LIFECYCLE_BRIDGE } from "../runtime/index.ts";
 import {
   createServerRuntimeContext,
   type ServerRuntimeContextInit
@@ -224,6 +227,7 @@ export function createSocketIoServerAdapter<
     string,
     Map<string, SocketIoChannelRequest>
   >();
+  const disconnectHandlersBySocketId = new Map<string, () => void>();
   const namespace = options.io.of("/");
   let isDisposed = false;
 
@@ -287,45 +291,61 @@ export function createSocketIoServerAdapter<
       return;
     }
 
-    socket.on(commandEvent, (request, acknowledge) => {
-      void handleSocketIoCommandRequest(
-        socket,
-        request,
-        acknowledge,
-        options.runtime,
-        resolveSocketContext
-      );
-    });
-    socket.on(joinEvent, (request, acknowledge) => {
-      void handleSocketIoChannelRequest(
-        socket,
-        request,
-        acknowledge,
-        "join",
-        options.runtime,
-        resolveSocketContext,
-        joinedChannelsBySocketId
-      );
-    });
-    socket.on(leaveEvent, (request, acknowledge) => {
-      void handleSocketIoChannelRequest(
-        socket,
-        request,
-        acknowledge,
-        "leave",
-        options.runtime,
-        resolveSocketContext,
-        joinedChannelsBySocketId
-      );
-    });
-    socket.on("disconnect", () => {
-      contextBySocketId.delete(socket.id);
-      void removeSocketIoChannelMemberships(
-        socket.id,
-        joinedChannelsBySocketId,
-        options.runtime
-      );
-    });
+    void resolveSocketContext(socket)
+      .then(async (context) => {
+        await notifySocketIoRuntimeConnected(options.runtime, {
+          connectionId: socket.id,
+          context
+        });
+
+        socket.on(commandEvent, (request, acknowledge) => {
+          void handleSocketIoCommandRequest(
+            socket,
+            request,
+            acknowledge,
+            options.runtime,
+            resolveSocketContext
+          );
+        });
+        socket.on(joinEvent, (request, acknowledge) => {
+          void handleSocketIoChannelRequest(
+            socket,
+            request,
+            acknowledge,
+            "join",
+            options.runtime,
+            resolveSocketContext,
+            joinedChannelsBySocketId
+          );
+        });
+        socket.on(leaveEvent, (request, acknowledge) => {
+          void handleSocketIoChannelRequest(
+            socket,
+            request,
+            acknowledge,
+            "leave",
+            options.runtime,
+            resolveSocketContext,
+            joinedChannelsBySocketId
+          );
+        });
+        const disconnectHandler = () => {
+          disconnectHandlersBySocketId.delete(socket.id);
+          void cleanupSocketIoConnection(
+            socket.id,
+            contextBySocketId,
+            joinedChannelsBySocketId,
+            options.runtime
+          );
+        };
+
+        disconnectHandlersBySocketId.set(socket.id, disconnectHandler);
+        socket.on("disconnect", disconnectHandler);
+      })
+      .catch(() => {
+        contextBySocketId.delete(socket.id);
+        socket.disconnect(true);
+      });
   };
 
   namespace.use(connectionMiddleware);
@@ -344,13 +364,29 @@ export function createSocketIoServerAdapter<
       namespace.off("connection", connectionHandler);
 
       for (const socket of namespace.sockets.values()) {
+        const disconnectHandler = disconnectHandlersBySocketId.get(socket.id);
+
+        if (disconnectHandler !== undefined) {
+          socket.off("disconnect", disconnectHandler);
+          disconnectHandlersBySocketId.delete(socket.id);
+          void cleanupSocketIoConnection(
+            socket.id,
+            contextBySocketId,
+            joinedChannelsBySocketId,
+            options.runtime
+          );
+        }
+
         socket.removeAllListeners(commandEvent);
         socket.removeAllListeners(joinEvent);
         socket.removeAllListeners(leaveEvent);
+        socket.disconnect(true);
       }
 
-      contextBySocketId.clear();
-      joinedChannelsBySocketId.clear();
+      if (namespace.sockets.size === 0) {
+        contextBySocketId.clear();
+        joinedChannelsBySocketId.clear();
+      }
     }
   });
 }
@@ -393,7 +429,7 @@ export function getSocketIoChannelRoom(
 ): string {
   assertNonEmptyString(channelName, "Socket.IO channel name");
 
-  return `${SOCKET_IO_CHANNEL_ROOM_PREFIX}${channelName}:${JSON.stringify(key)}`;
+  return `${SOCKET_IO_CHANNEL_ROOM_PREFIX}${stringifyChannelInstance(channelName, key)}`;
 }
 
 /**
@@ -487,23 +523,39 @@ async function handleSocketIoChannelRequest<TRuntimeContext>(
       rememberJoinedSocketIoChannel(
         joinedChannelsBySocketId,
         socket.id,
-        channelRequest
+        {
+          name: membership.name,
+          key: membership.key
+        }
       );
     } else {
+      const channelContract = runtime.resolveChannel(channelRequest.name);
+
+      if (channelContract === undefined) {
+        throw new TypeError(
+          `Unknown channel contract: "${channelRequest.name}".`
+        );
+      }
+
+      const instance = createChannelInstance(channelContract, channelRequest.key);
+
       await runtime.leaveChannel(
-        channelRequest.name,
-        channelRequest.key,
+        instance.name,
+        instance.key,
         {
           memberId: socket.id
         }
       );
       await socket.leave(
-        getSocketIoChannelRoom(channelRequest.name, channelRequest.key)
+        getSocketIoChannelRoom(instance.name, instance.key)
       );
       forgetJoinedSocketIoChannel(
         joinedChannelsBySocketId,
         socket.id,
-        channelRequest
+        {
+          name: instance.name,
+          key: instance.key
+        }
       );
     }
 
@@ -579,6 +631,38 @@ async function removeSocketIoChannelMemberships<TRuntimeContext>(
         memberId: socketId
       }
     );
+  }
+}
+
+async function cleanupSocketIoConnection<TRuntimeContext>(
+  socketId: string,
+  contextBySocketId: Map<string, TRuntimeContext>,
+  joinedChannelsBySocketId: Map<string, Map<string, SocketIoChannelRequest>>,
+  runtime: ServerRuntime<TRuntimeContext>
+): Promise<void> {
+  const connectionContext = contextBySocketId.get(socketId);
+
+  try {
+    await removeSocketIoChannelMemberships(
+      socketId,
+      joinedChannelsBySocketId,
+      runtime
+    );
+  } catch {
+    // Cleanup path stays best-effort and must not break adapter teardown.
+  }
+
+  try {
+    if (connectionContext !== undefined) {
+      await notifySocketIoRuntimeDisconnected(runtime, {
+        connectionId: socketId,
+        context: connectionContext
+      });
+    }
+  } catch {
+    // Disconnect cleanup also remains best-effort during teardown.
+  } finally {
+    contextBySocketId.delete(socketId);
   }
 }
 
@@ -726,4 +810,66 @@ function assertNonEmptyString(value: string, label: string): void {
   if (value.trim().length === 0) {
     throw new TypeError(`${label} must be a non-empty string.`);
   }
+}
+
+async function notifySocketIoRuntimeConnected<TRuntimeContext>(
+  runtime: ServerRuntime<TRuntimeContext>,
+  connection: {
+    readonly connectionId: string;
+    readonly context: TRuntimeContext;
+  }
+): Promise<void> {
+  const bridge = readServerRuntimeLifecycleBridge(runtime);
+
+  if (bridge === undefined) {
+    return;
+  }
+
+  await bridge.notifyConnected(connection);
+}
+
+async function notifySocketIoRuntimeDisconnected<TRuntimeContext>(
+  runtime: ServerRuntime<TRuntimeContext>,
+  connection: {
+    readonly connectionId: string;
+    readonly context: TRuntimeContext;
+  }
+): Promise<void> {
+  const bridge = readServerRuntimeLifecycleBridge(runtime);
+
+  if (bridge === undefined) {
+    return;
+  }
+
+  await bridge.notifyDisconnected(connection);
+}
+
+function readServerRuntimeLifecycleBridge<TRuntimeContext>(
+  runtime: ServerRuntime<TRuntimeContext>
+):
+  | {
+      readonly notifyConnected: (connection: {
+        readonly connectionId: string;
+        readonly context: TRuntimeContext;
+      }) => Promise<void>;
+      readonly notifyDisconnected: (connection: {
+        readonly connectionId: string;
+        readonly context: TRuntimeContext;
+      }) => Promise<void>;
+    }
+  | undefined {
+  const runtimeWithBridge = runtime as ServerRuntime<TRuntimeContext> & {
+    readonly [SERVER_RUNTIME_LIFECYCLE_BRIDGE]?: {
+      readonly notifyConnected: (connection: {
+        readonly connectionId: string;
+        readonly context: TRuntimeContext;
+      }) => Promise<void>;
+      readonly notifyDisconnected: (connection: {
+        readonly connectionId: string;
+        readonly context: TRuntimeContext;
+      }) => Promise<void>;
+    };
+  };
+
+  return runtimeWithBridge[SERVER_RUNTIME_LIFECYCLE_BRIDGE];
 }

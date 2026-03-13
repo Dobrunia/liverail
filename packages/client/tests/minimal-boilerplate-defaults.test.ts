@@ -10,13 +10,13 @@ import {
   createContractRegistry
 } from "@liverail/contracts";
 import {
-  createServerRuntime,
-  createSocketIoServerAdapter
-} from "@liverail/server";
+  createServerRuntime
+} from "../../server/src/index.ts";
+import { createSocketIoServerAdapter } from "../../server/src/socket-io-entry.ts";
 import {
-  createClientRuntime,
-  createSocketIoClientTransport
+  createClientRuntime
 } from "../src/index.ts";
+import { createSocketIoClientTransport } from "../src/socket-io-entry.ts";
 
 /**
  * Проверяет, что клиентский Socket.IO adapter умеет строиться напрямую

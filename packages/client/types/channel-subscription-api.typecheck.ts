@@ -48,6 +48,7 @@ type ShouldReturnTypedSubscription = Assert<
       readonly contract: typeof voiceRoom;
       readonly name: "voice-room";
       readonly key: ChannelKey<typeof voiceRoom>;
+      readonly id: string;
     }>
   >
 >;

@@ -14,11 +14,13 @@ import {
 } from "@liverail/contracts";
 import {
   createServerRuntime,
+  type ServerRuntimeContext
+} from "../src/index.ts";
+import {
   createSocketIoServerAdapter,
-  type ServerRuntimeContext,
   SOCKET_IO_CHANNEL_JOIN_EVENT,
   SOCKET_IO_COMMAND_EVENT
-} from "../src/index.ts";
+} from "../src/socket-io-entry.ts";
 
 /**
  * Проверяет, что transport layer может единообразно собрать connection/session

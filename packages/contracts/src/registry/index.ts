@@ -11,13 +11,22 @@ export type AnyContract =
   | CommandContract
   | EventContract
   | ChannelContract
-  | PolicyContract<string, any>;
+  | PolicyContract<string, any, any, any>;
 
 /**
  * Отображение набора контрактов в lookup-объект по их именам.
  */
 export type ContractsByName<TContracts extends readonly AnyContract[]> = {
   readonly [TContract in TContracts[number] as TContract["name"]]: TContract;
+};
+
+/**
+ * Кортеж имен контрактов в порядке их регистрации.
+ */
+export type ContractNames<TContracts extends readonly AnyContract[]> = {
+  readonly [TIndex in keyof TContracts]: TContracts[TIndex] extends AnyContract
+    ? TContracts[TIndex]["name"]
+    : never;
 };
 
 /**
@@ -38,14 +47,28 @@ export interface ContractRegistryBucket<
 }
 
 /**
+ * Read-only introspection bucket поверх registry с контрактами и их именами.
+ */
+export interface ContractIntrospectionBucket<
+  TContracts extends readonly AnyContract[] = readonly AnyContract[]
+> extends ContractRegistryBucket<TContracts> {
+  /**
+   * Имена контрактов в порядке регистрации.
+   */
+  readonly names: ContractNames<TContracts>;
+}
+
+/**
  * Входные данные для явного построения registry.
  */
 export interface ContractRegistryDefinition<
   TCommands extends readonly CommandContract[] = readonly CommandContract[],
   TEvents extends readonly EventContract[] = readonly EventContract[],
   TChannels extends readonly ChannelContract[] = readonly ChannelContract[],
-  TPolicies extends readonly PolicyContract<string, any>[] = readonly PolicyContract<
+  TPolicies extends readonly PolicyContract<string, any, any, any>[] = readonly PolicyContract<
     string,
+    any,
+    any,
     any
   >[]
 > {
@@ -77,8 +100,10 @@ export interface ContractRegistry<
   TCommands extends readonly CommandContract[] = readonly CommandContract[],
   TEvents extends readonly EventContract[] = readonly EventContract[],
   TChannels extends readonly ChannelContract[] = readonly ChannelContract[],
-  TPolicies extends readonly PolicyContract<string, any>[] = readonly PolicyContract<
+  TPolicies extends readonly PolicyContract<string, any, any, any>[] = readonly PolicyContract<
     string,
+    any,
+    any,
     any
   >[]
 > {
@@ -101,6 +126,41 @@ export interface ContractRegistry<
    * Коллекция policy-контрактов.
    */
   readonly policies: ContractRegistryBucket<TPolicies>;
+}
+
+/**
+ * Read-only introspection shape полного registry.
+ */
+export interface ContractRegistryIntrospection<
+  TCommands extends readonly CommandContract[] = readonly CommandContract[],
+  TEvents extends readonly EventContract[] = readonly EventContract[],
+  TChannels extends readonly ChannelContract[] = readonly ChannelContract[],
+  TPolicies extends readonly PolicyContract<string, any, any, any>[] = readonly PolicyContract<
+    string,
+    any,
+    any,
+    any
+  >[]
+> {
+  /**
+   * Introspection bucket команд.
+   */
+  readonly commands: ContractIntrospectionBucket<TCommands>;
+
+  /**
+   * Introspection bucket событий.
+   */
+  readonly events: ContractIntrospectionBucket<TEvents>;
+
+  /**
+   * Introspection bucket каналов.
+   */
+  readonly channels: ContractIntrospectionBucket<TChannels>;
+
+  /**
+   * Introspection bucket policies.
+   */
+  readonly policies: ContractIntrospectionBucket<TPolicies>;
 }
 
 /**
@@ -134,7 +194,7 @@ export function defineChannels<
  * Создает неизменяемый typed tuple policy-контрактов без ручного `as const`.
  */
 export function definePolicies<
-  const TPolicies extends readonly PolicyContract<string, any>[]
+  const TPolicies extends readonly PolicyContract<string, any, any, any>[]
 >(...policies: TPolicies): TPolicies {
   return Object.freeze([...policies]) as TPolicies;
 }
@@ -146,7 +206,7 @@ export function createContractRegistry<
   TCommands extends readonly CommandContract[] = readonly [],
   TEvents extends readonly EventContract[] = readonly [],
   TChannels extends readonly ChannelContract[] = readonly [],
-  TPolicies extends readonly PolicyContract<string, any>[] = readonly []
+  TPolicies extends readonly PolicyContract<string, any, any, any>[] = readonly []
 >(
   definition: ContractRegistryDefinition<
     TCommands,
@@ -184,6 +244,31 @@ export function createContractRegistry<
   }) as ContractRegistry<TCommands, TEvents, TChannels, TPolicies>;
 }
 
+/**
+ * Возвращает безопасный read-only introspection snapshot registry без доступа
+ * к внутренним структурам runtime.
+ */
+export function inspectContractRegistry<
+  TCommands extends readonly CommandContract[] = readonly CommandContract[],
+  TEvents extends readonly EventContract[] = readonly EventContract[],
+  TChannels extends readonly ChannelContract[] = readonly ChannelContract[],
+  TPolicies extends readonly PolicyContract<string, any, any, any>[] = readonly PolicyContract<
+    string,
+    any,
+    any,
+    any
+  >[]
+>(
+  registry: ContractRegistry<TCommands, TEvents, TChannels, TPolicies>
+): ContractRegistryIntrospection<TCommands, TEvents, TChannels, TPolicies> {
+  return deepFreeze({
+    commands: createIntrospectionBucket(registry.commands),
+    events: createIntrospectionBucket(registry.events),
+    channels: createIntrospectionBucket(registry.channels),
+    policies: createIntrospectionBucket(registry.policies)
+  }) as ContractRegistryIntrospection<TCommands, TEvents, TChannels, TPolicies>;
+}
+
 function createRegistryBucket<
   TContract extends AnyContract,
   TContracts extends readonly TContract[]
@@ -215,4 +300,19 @@ function createRegistryBucket<
     list,
     byName: byName as unknown as ContractsByName<TContracts>
   }) as unknown as ContractRegistryBucket<TContracts>;
+}
+
+function createIntrospectionBucket<
+  TContract extends AnyContract,
+  TContracts extends readonly TContract[]
+>(
+  bucket: ContractRegistryBucket<TContracts>
+): ContractIntrospectionBucket<TContracts> {
+  return deepFreeze({
+    list: bucket.list,
+    byName: bucket.byName,
+    names: Object.freeze(
+      bucket.list.map((contract) => contract.name)
+    ) as ContractNames<TContracts>
+  }) as ContractIntrospectionBucket<TContracts>;
 }

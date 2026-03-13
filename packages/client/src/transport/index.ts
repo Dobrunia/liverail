@@ -54,7 +54,12 @@ export type ClientTransportChannelUnsubscriber = (
 /**
  * Официальные статусы transport connection lifecycle для client runtime.
  */
-export type ClientTransportConnectionStatus = "connected" | "disconnected";
+export type ClientTransportConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected"
+  | "failed";
 
 /**
  * Transport-agnostic lifecycle event текущей client session.
@@ -64,6 +69,11 @@ export interface ClientTransportConnectionEvent {
    * Текущее состояние transport session.
    */
   readonly status: ClientTransportConnectionStatus;
+
+  /**
+   * Необязательная причина сбоя transport connection lifecycle.
+   */
+  readonly error?: unknown;
 }
 
 /**

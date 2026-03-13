@@ -11,13 +11,15 @@ import {
 } from "@liverail/contracts";
 import {
   createServerRuntime,
-  createSocketIoChannelRoute,
-  createSocketIoEventDeliverer,
-  createSocketIoServerAdapter,
-  createSocketIoSocketRoute,
   type ServerEventRoute,
   type ServerEventDeliverer
 } from "../src/index.js";
+import {
+  createSocketIoChannelRoute,
+  createSocketIoEventDeliverer,
+  createSocketIoServerAdapter,
+  createSocketIoSocketRoute
+} from "../src/socket-io-entry.js";
 
 /**
  * Проверяет на уровне типов, что Socket.IO server adapter принимает уже

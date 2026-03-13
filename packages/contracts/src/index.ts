@@ -38,6 +38,19 @@ export type {
 } from "./shared/primitives.ts";
 
 export {
+  SYSTEM_EVENT_NAMES,
+  createSystemEvent,
+  isSystemEventName
+} from "./system/index.ts";
+export type {
+  SystemConnectionLifecycleState,
+  SystemEvent,
+  SystemEventName,
+  SystemEventPayload,
+  SystemEventPayloadMap
+} from "./system/index.ts";
+
+export {
   COMMAND_ACK_STATUSES,
   COMMAND_RESULT_STATUSES,
   command,
@@ -71,7 +84,10 @@ export type {
 export {
   channel,
   createChannelInstance,
-  parseChannelKey
+  isSameChannelInstance,
+  parseChannelInstance,
+  parseChannelKey,
+  stringifyChannelInstance
 } from "./channel/index.ts";
 export type {
   ChannelContext,
@@ -127,11 +143,15 @@ export {
   defineChannels,
   defineCommands,
   defineEvents,
-  definePolicies
+  definePolicies,
+  inspectContractRegistry
 } from "./registry/index.ts";
 export type {
   AnyContract,
+  ContractIntrospectionBucket,
+  ContractNames,
   ContractRegistry,
+  ContractRegistryIntrospection,
   ContractRegistryBucket,
   ContractRegistryDefinition,
   ContractsByName

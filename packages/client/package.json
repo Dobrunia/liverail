@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -12,10 +13,21 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./socket-io": {
+      "types": "./dist/socket-io-entry.d.ts",
+      "import": "./dist/socket-io-entry.js"
     }
   },
   "dependencies": {
-    "@liverail/contracts": "0.0.0",
+    "@liverail/contracts": "0.0.0"
+  },
+  "peerDependencies": {
     "socket.io-client": "^4.8.3"
+  },
+  "peerDependenciesMeta": {
+    "socket.io-client": {
+      "optional": true
+    }
   }
 }

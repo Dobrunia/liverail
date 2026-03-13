@@ -11,9 +11,9 @@ import {
 import {
   createServerRuntime,
   createServerRuntimeContext,
-  createSocketIoServerAdapter,
   type ServerRuntimeContext
 } from "../src/index.js";
+import { createSocketIoServerAdapter } from "../src/socket-io-entry.js";
 
 /**
  * Проверяет на уровне типов, что unified connection context может быть собран

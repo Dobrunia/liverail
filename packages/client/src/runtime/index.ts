@@ -4,20 +4,29 @@ import type {
   CommandAck,
   CommandContract,
   CommandResult,
+  ContractRegistryIntrospection,
   ContractRegistry,
   EventContract,
   EventPayload,
+  SystemConnectionLifecycleState,
+  SystemEventName,
+  SystemEventPayload,
   ResolveSchemaInput
 } from "@liverail/contracts";
 import {
   createChannelInstance,
+  createSystemEvent,
   createRealtimeError,
+  inspectContractRegistry,
   isRealtimeError,
   parseCommandAck,
   parseCommandInput,
   parseEventPayload
 } from "@liverail/contracts";
-import type { ClientEventListener } from "../events/index.ts";
+import type {
+  ClientEventListener,
+  ClientSystemEventListener
+} from "../events/index.ts";
 import {
   reportClientRuntimeError,
   type ClientRuntimeErrorHandler,
@@ -89,6 +98,31 @@ export interface ClientRuntime<
   readonly registry: TRegistry;
 
   /**
+   * Возвращает read-only introspection snapshot зарегистрированных контрактов.
+   */
+  inspectContracts(): ContractRegistryIntrospection<
+    TRegistry["commands"]["list"],
+    TRegistry["events"]["list"],
+    TRegistry["channels"]["list"],
+    TRegistry["policies"]["list"]
+  >;
+
+  /**
+   * Возвращает текущее состояние transport-agnostic connection lifecycle.
+   */
+  inspectConnection(): ClientConnectionLifecycleSnapshot;
+
+  /**
+   * Регистрирует listener изменений connection lifecycle и возвращает cleanup.
+   */
+  onConnectionState(listener: ClientConnectionStateListener): () => void;
+
+  /**
+   * Возвращает read-only debug snapshot текущего client runtime состояния.
+   */
+  inspectRuntime(): ClientRuntimeDebugSnapshot<TRegistry>;
+
+  /**
    * Разрешает command-контракт по имени.
    */
   resolveCommand<TName extends keyof TRegistry["commands"]["byName"] & string>(
@@ -146,6 +180,14 @@ export interface ClientRuntime<
   ): () => void;
 
   /**
+   * Регистрирует listener отдельного system event и возвращает cleanup.
+   */
+  onSystemEvent<TName extends SystemEventName>(
+    name: TName,
+    listener: ClientSystemEventListener<TName>
+  ): () => void;
+
+  /**
    * Регистрирует typed event applier по event contract и store-agnostic state accessor.
    */
   registerEventApplier<
@@ -178,6 +220,102 @@ interface RegisteredClientEventApplier {
    * Применяет уже провалидированный payload к пользовательскому состоянию.
    */
   readonly apply: (payload: unknown) => void;
+}
+
+/**
+ * Официальные состояния transport-agnostic client connection lifecycle.
+ */
+export type ClientConnectionLifecycleState = SystemConnectionLifecycleState;
+
+/**
+ * Централизованный snapshot client connection lifecycle.
+ */
+export interface ClientConnectionLifecycleSnapshot {
+  /**
+   * Текущее состояние соединения.
+   */
+  readonly state: ClientConnectionLifecycleState;
+
+  /**
+   * Предыдущее состояние, если переход уже происходил.
+   */
+  readonly previousState?: ClientConnectionLifecycleState;
+
+  /**
+   * Признак активного подключенного соединения.
+   */
+  readonly connected: boolean;
+
+  /**
+   * Признак того, что transport присылает connection lifecycle события.
+   */
+  readonly transportBound: boolean;
+}
+
+/**
+ * Listener изменений client connection lifecycle.
+ */
+export type ClientConnectionStateListener = (
+  snapshot: ClientConnectionLifecycleSnapshot
+) => void;
+
+/**
+ * Стабильное operational-состояние client runtime.
+ */
+export type ClientRuntimeState = "active" | "destroyed";
+
+/**
+ * Read-only debug snapshot client runtime.
+ */
+export interface ClientRuntimeDebugSnapshot<
+  TRegistry extends ContractRegistry = ContractRegistry
+> {
+  /**
+   * Текущее operational-состояние runtime.
+   */
+  readonly state: ClientRuntimeState;
+
+  /**
+   * Текущее состояние transport-agnostic connection lifecycle.
+   */
+  readonly connectionState: ClientConnectionLifecycleSnapshot;
+
+  /**
+   * Introspection зарегистрированных контрактов.
+   */
+  readonly contracts: ContractRegistryIntrospection<
+    TRegistry["commands"]["list"],
+    TRegistry["events"]["list"],
+    TRegistry["channels"]["list"],
+    TRegistry["policies"]["list"]
+  >;
+
+  /**
+   * Признак того, что runtime связан хотя бы с одним transport adapter.
+   */
+  readonly transportBound: boolean;
+
+  /**
+   * Активные клиентские подписки.
+   */
+  readonly activeSubscriptions: readonly ClientChannelSubscription<
+    TRegistry["channels"]["list"][number]
+  >[];
+
+  /**
+   * Имена событий, для которых сейчас есть listener-ы.
+   */
+  readonly eventListenerNames: readonly EventName<TRegistry>[];
+
+  /**
+   * Текущее число listener-ов по имени события.
+   */
+  readonly eventListenerCounts: Readonly<Record<string, number>>;
+
+  /**
+   * Имена событий, для которых сейчас зарегистрированы applier-ы.
+   */
+  readonly eventApplierNames: readonly EventName<TRegistry>[];
 }
 
 /**
@@ -215,25 +353,91 @@ export function createClientRuntime<
     string,
     Set<ClientEventListener<EventContract>>
   >();
+  const systemEventListeners = new Map<
+    SystemEventName,
+    Set<ClientSystemEventListener<SystemEventName>>
+  >();
   const transportEventReceiver = createTransportEventReceiver(
     registry,
     eventAppliers,
     eventListeners,
     onError
   );
+  const hasConnectionTransport = transport?.bindConnection !== undefined;
+  const connectionStateListeners = new Set<ClientConnectionStateListener>();
+  let connectionState = createClientConnectionLifecycleSnapshot(
+    hasConnectionTransport ? "connecting" : "idle",
+    undefined,
+    hasConnectionTransport
+  );
   const transportConnectionReceiver = createTransportConnectionReceiver(
     channelSubscriptions,
     transport,
-    onError
+    onError,
+    (event) => {
+      transitionClientConnectionState(event.status, event.error);
+    }
   );
   const unbindTransportConnection = transport?.bindConnection?.(
     transportConnectionReceiver
   );
   const unbindTransportEvents = transport?.bindEvents?.(transportEventReceiver);
+  const contractIntrospection = inspectContractRegistry(registry);
+  const transportBound = transport !== undefined;
   let isDestroyed = false;
 
   return Object.freeze({
     registry,
+    inspectContracts() {
+      return contractIntrospection;
+    },
+    inspectConnection() {
+      return connectionState;
+    },
+    onConnectionState(listener: ClientConnectionStateListener) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "register connection listeners"
+      );
+
+      connectionStateListeners.add(listener);
+
+      return () => {
+        connectionStateListeners.delete(listener);
+      };
+    },
+    inspectRuntime() {
+      const activeSubscriptions = Object.freeze(
+        [...channelSubscriptions.values()]
+      ) as readonly ClientChannelSubscription<
+        TRegistry["channels"]["list"][number]
+      >[];
+      const eventListenerNames = Object.freeze(
+        [...eventListeners.keys()]
+      ) as readonly EventName<TRegistry>[];
+      const eventApplierNames = Object.freeze(
+        [...eventAppliers.keys()]
+      ) as readonly EventName<TRegistry>[];
+      const eventListenerCounts = Object.freeze(
+        Object.fromEntries(
+          [...eventListeners.entries()].map(([name, bucket]) => [
+            name,
+            bucket.size
+          ])
+        )
+      ) as Readonly<Record<string, number>>;
+
+      return Object.freeze({
+        state: isDestroyed ? "destroyed" : "active",
+        connectionState,
+        contracts: contractIntrospection,
+        transportBound,
+        activeSubscriptions,
+        eventListenerNames,
+        eventListenerCounts,
+        eventApplierNames
+      });
+    },
     resolveCommand(name: string) {
       return registry.commands.byName[
         name as keyof typeof registry.commands.byName
@@ -372,17 +576,24 @@ export function createClientRuntime<
       try {
         await transport.subscribeChannel(request);
       } catch (error) {
-        if (isRealtimeError(error)) {
-          throw error;
-        }
+        const normalizedError = isRealtimeError(error)
+          ? error
+          : normalizeClientChannelTransportError(error, name, "subscribe");
 
-        throw normalizeClientChannelTransportError(error, name, "subscribe");
+        emitSystemEvent("join_failed", {
+          channelName: contract.name,
+          key: instance.key,
+          error: normalizedError.toJSON()
+        });
+
+        throw normalizedError;
       }
 
       const subscription = Object.freeze({
         contract,
         name: contract.name,
-        key: instance.key
+        key: instance.key,
+        id: instance.id
       }) as ClientChannelSubscription<ChannelContract>;
 
       channelSubscriptions.set(subscriptionKey, subscription);
@@ -478,6 +689,38 @@ export function createClientRuntime<
         }
       };
     },
+    onSystemEvent(
+      name: SystemEventName,
+      listener: ClientSystemEventListener<SystemEventName>
+    ) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "register system event listeners"
+      );
+
+      let bucket = systemEventListeners.get(name);
+
+      if (bucket === undefined) {
+        bucket = new Set();
+        systemEventListeners.set(name, bucket);
+      }
+
+      bucket.add(listener);
+
+      return () => {
+        const currentBucket = systemEventListeners.get(name);
+
+        if (currentBucket === undefined) {
+          return;
+        }
+
+        currentBucket.delete(listener);
+
+        if (currentBucket.size === 0) {
+          systemEventListeners.delete(name);
+        }
+      };
+    },
     registerEventApplier<
       TName extends EventName<TRegistry>,
       TState
@@ -546,14 +789,121 @@ export function createClientRuntime<
       }
 
       isDestroyed = true;
+      const subscriptionsToCleanup = [...channelSubscriptions.values()];
+
+      if (transport?.unsubscribeChannel !== undefined) {
+        for (const subscription of subscriptionsToCleanup) {
+          const request = {
+            name: subscription.name,
+            key: subscription.key
+          } satisfies ClientTransportChannelRequest;
+
+          void Promise.resolve(transport.unsubscribeChannel(request)).catch(
+            (error: unknown) => {
+              const normalizedError = isRealtimeError(error)
+                ? error
+                : normalizeClientChannelTransportError(
+                    error,
+                    subscription.name,
+                    "unsubscribe"
+                  );
+
+              reportClientRuntimeError(normalizedError, onError);
+            }
+          );
+        }
+      }
+
+      transitionClientConnectionState(
+        hasConnectionTransport ? "disconnected" : "idle"
+      );
       eventAppliers.clear();
       eventListeners.clear();
+      systemEventListeners.clear();
       channelSubscriptions.clear();
       unbindTransportConnection?.();
       unbindTransportEvents?.();
       transport?.dispose?.();
     }
   }) as ClientRuntime<TRegistry>;
+
+  function transitionClientConnectionState(
+    nextState: ClientConnectionLifecycleState,
+    error?: unknown
+  ): void {
+    const previousState = connectionState.state;
+
+    if (previousState === nextState && error === undefined) {
+      return;
+    }
+
+    connectionState = createClientConnectionLifecycleSnapshot(
+      nextState,
+      previousState,
+      hasConnectionTransport
+    );
+
+    if (nextState === "failed" && error !== undefined) {
+      const normalizedError = normalizeClientConnectionLifecycleError(error);
+
+      reportClientRuntimeError(
+        normalizedError,
+        onError
+      );
+      emitSystemEvent("connection_failed", {
+        state: "failed",
+        previousState,
+        error: normalizedError.toJSON()
+      });
+    } else if (nextState === "connected") {
+      if (
+        previousState === "reconnecting" ||
+        previousState === "disconnected" ||
+        previousState === "failed"
+      ) {
+        emitSystemEvent("reconnect_succeeded", {
+          state: "connected",
+          previousState
+        });
+      } else {
+        emitSystemEvent("connected", {
+          state: "connected",
+          previousState
+        });
+      }
+    } else if (nextState === "disconnected") {
+      emitSystemEvent("disconnected", {
+        state: "disconnected",
+        previousState
+      });
+    } else if (nextState === "reconnecting") {
+      emitSystemEvent("reconnect_started", {
+        state: "reconnecting",
+        previousState
+      });
+    }
+
+    for (const listener of [...connectionStateListeners]) {
+      listener(connectionState);
+    }
+  }
+
+  function emitSystemEvent<TName extends SystemEventName>(
+    name: TName,
+    payload: SystemEventPayload<TName>
+  ): void {
+    const bucket = systemEventListeners.get(name);
+
+    if (bucket === undefined) {
+      return;
+    }
+
+    const systemEvent = createSystemEvent(name, payload);
+
+    for (const listener of [...bucket]) {
+      (listener as ClientSystemEventListener<TName>)(systemEvent);
+    }
+  }
 }
 
 /**
@@ -563,11 +913,23 @@ export function createClientRuntime<
 function createTransportConnectionReceiver(
   channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
   transport: ClientTransport | undefined,
-  onError: ClientRuntimeErrorHandler | undefined
+  onError: ClientRuntimeErrorHandler | undefined,
+  onConnectionEvent: (event: ClientTransportConnectionEvent) => void
 ): ClientTransportConnectionReceiver {
   let shouldResubscribe = false;
 
   return (event: ClientTransportConnectionEvent) => {
+    onConnectionEvent(event);
+
+    if (event.status === "failed" || event.status === "connecting") {
+      return;
+    }
+
+    if (event.status === "reconnecting") {
+      shouldResubscribe = true;
+      return;
+    }
+
     if (event.status === "disconnected") {
       shouldResubscribe = true;
       return;
@@ -780,6 +1142,38 @@ function normalizeClientEventApplierError(
     },
     cause: error
   });
+}
+
+function normalizeClientConnectionLifecycleError(error: unknown) {
+  return createRealtimeError({
+    code: "internal-error",
+    message: "Client connection lifecycle failed at stage \"connect\".",
+    details: {
+      stage: "connect"
+    },
+    cause: error
+  });
+}
+
+function createClientConnectionLifecycleSnapshot(
+  state: ClientConnectionLifecycleState,
+  previousState: ClientConnectionLifecycleState | undefined,
+  transportBound: boolean
+): ClientConnectionLifecycleSnapshot {
+  const snapshot: ClientConnectionLifecycleSnapshot = {
+    state,
+    connected: state === "connected",
+    transportBound
+  };
+
+  if (previousState !== undefined) {
+    return Object.freeze({
+      ...snapshot,
+      previousState
+    });
+  }
+
+  return Object.freeze(snapshot);
 }
 
 function assertClientRuntimeIsActive(

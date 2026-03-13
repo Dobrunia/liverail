@@ -1,10 +1,12 @@
 import {
   createChannelInstance,
   createRealtimeError,
+  inspectContractRegistry,
   isRealtimeError,
   parseCommandAck,
   parseCommandInput,
-  parseEventPayload
+  parseEventPayload,
+  stringifyChannelInstance
 } from "@liverail/contracts";
 import type {
   ChannelContract,
@@ -13,6 +15,7 @@ import type {
   CommandInput,
   CommandContract,
   CommandPolicyContract,
+  ContractRegistryIntrospection,
   ConnectPolicyContract,
   ContractRegistry,
   EventContract,
@@ -27,6 +30,14 @@ import type {
 } from "@liverail/contracts";
 
 type MaybePromise<T> = T | Promise<T>;
+
+/**
+ * Внутренний bridge-ключ для transport adapter-ов, которым нужно сообщать
+ * runtime о connect/disconnect стадиях без расширения официального public API.
+ */
+export const SERVER_RUNTIME_LIFECYCLE_BRIDGE = Symbol(
+  "liverail.server.runtime.lifecycle-bridge"
+);
 
 type CommandName<TRegistry extends ContractRegistry> =
   keyof TRegistry["commands"]["byName"] & string;
@@ -105,7 +116,8 @@ type InferServerRuntimeContext<
   TEventReceivePolicies,
   TEventDeliverers,
   TChannelJoinPolicies,
-  TChannelJoinAuthorizers
+  TChannelJoinAuthorizers,
+  TLifecycleHooks
 > = NormalizeServerRuntimeContext<
   | ExtractServerRuntimeContext<TConnectionPolicies>
   | ExtractServerRuntimeContext<TCommandPolicies>
@@ -116,6 +128,7 @@ type InferServerRuntimeContext<
   | ExtractServerRuntimeContext<TEventDeliverers>
   | ExtractServerRuntimeContext<TChannelJoinPolicies>
   | ExtractServerRuntimeContext<TChannelJoinAuthorizers>
+  | ExtractServerRuntimeContext<TLifecycleHooks>
 >;
 
 /**
@@ -186,6 +199,11 @@ export interface CreateServerRuntimeOptions<
     TRegistry,
     TRuntimeContext
   >;
+
+  /**
+   * Базовые lifecycle hooks server runtime для connect/disconnect/join/leave.
+   */
+  readonly lifecycleHooks?: ServerLifecycleHooks<TRegistry, TRuntimeContext>;
 }
 
 /**
@@ -221,6 +239,9 @@ export type DefineServerRuntimeOptions<
   TChannelJoinAuthorizers extends
     | ServerChannelJoinAuthorizers<TRegistry, any>
     | undefined = undefined,
+  TLifecycleHooks extends
+    | ServerLifecycleHooks<TRegistry, any>
+    | undefined = undefined,
   TRuntimeContext = InferServerRuntimeContext<
     TConnectionPolicies,
     TCommandPolicies,
@@ -230,7 +251,8 @@ export type DefineServerRuntimeOptions<
     TEventReceivePolicies,
     TEventDeliverers,
     TChannelJoinPolicies,
-    TChannelJoinAuthorizers
+    TChannelJoinAuthorizers,
+    TLifecycleHooks
   >
 > = CreateServerRuntimeOptions<TRuntimeContext, TRegistry> & {
   readonly registry: TRegistry;
@@ -243,6 +265,7 @@ export type DefineServerRuntimeOptions<
   readonly eventDeliverers?: TEventDeliverers;
   readonly channelJoinPolicies?: TChannelJoinPolicies;
   readonly channelJoinAuthorizers?: TChannelJoinAuthorizers;
+  readonly lifecycleHooks?: TLifecycleHooks;
 };
 
 /**
@@ -257,6 +280,21 @@ export interface ServerRuntime<
    * Явный registry-контрактов, используемый всеми следующими pipeline-слоями.
    */
   readonly registry: TRegistry;
+
+  /**
+   * Возвращает read-only introspection snapshot зарегистрированных контрактов.
+   */
+  inspectContracts(): ContractRegistryIntrospection<
+    TRegistry["commands"]["list"],
+    TRegistry["events"]["list"],
+    TRegistry["channels"]["list"],
+    TRegistry["policies"]["list"]
+  >;
+
+  /**
+   * Возвращает read-only debug snapshot текущего server runtime состояния.
+   */
+  inspectRuntime(): ServerRuntimeDebugSnapshot<TRegistry>;
 
   /**
    * Централизованно авторизует новое подключение через connect policy layer.
@@ -379,6 +417,114 @@ export interface ServerCommandExecution<
    */
   readonly context: TRuntimeContext;
 }
+
+/**
+ * Стабильное operational-состояние server runtime.
+ */
+export type ServerRuntimeState = "ready";
+
+/**
+ * Read-only debug entry активного channel instance.
+ */
+export interface ServerRuntimeActiveChannelDebug<
+  TChannel extends ChannelContract = ChannelContract
+> {
+  /**
+   * Контракт активного канала.
+   */
+  readonly contract: TChannel;
+
+  /**
+   * Имя channel template.
+   */
+  readonly name: TChannel["name"];
+
+  /**
+   * Нормализованный ключ конкретного channel instance.
+   */
+  readonly key: ChannelKey<TChannel>;
+
+  /**
+   * Текущее число участников channel instance.
+   */
+  readonly memberCount: number;
+
+  /**
+   * Идентификаторы текущих участников в детерминированном порядке.
+   */
+  readonly memberIds: readonly string[];
+}
+
+/**
+ * Read-only debug snapshot server runtime.
+ */
+export interface ServerRuntimeDebugSnapshot<
+  TRegistry extends ContractRegistry = ContractRegistry
+> {
+  /**
+   * Текущее operational-состояние runtime.
+   */
+  readonly state: ServerRuntimeState;
+
+  /**
+   * Introspection зарегистрированных контрактов.
+   */
+  readonly contracts: ContractRegistryIntrospection<
+    TRegistry["commands"]["list"],
+    TRegistry["events"]["list"],
+    TRegistry["channels"]["list"],
+    TRegistry["policies"]["list"]
+  >;
+
+  /**
+   * Имена подключенных connect policies.
+   */
+  readonly connectionPolicyNames: readonly string[];
+
+  /**
+   * Имена зарегистрированных command handlers.
+   */
+  readonly commandHandlerNames: readonly CommandName<TRegistry>[];
+
+  /**
+   * Имена зарегистрированных event routers.
+   */
+  readonly eventRouterNames: readonly EventName<TRegistry>[];
+
+  /**
+   * Имена зарегистрированных event deliverers.
+   */
+  readonly eventDelivererNames: readonly EventName<TRegistry>[];
+
+  /**
+   * Read-only список активных channel instances.
+   */
+  readonly activeChannels: readonly ServerRuntimeActiveChannelDebug<
+    TRegistry["channels"]["list"][number]
+  >[];
+}
+
+/**
+ * Нормализованная lifecycle-модель конкретного server connection.
+ */
+export interface ServerConnectionLifecycle<TRuntimeContext = unknown> {
+  /**
+   * Стабильный transport-agnostic идентификатор подключения.
+   */
+  readonly connectionId: string;
+
+  /**
+   * Runtime-контекст конкретного подключения.
+   */
+  readonly context: TRuntimeContext;
+}
+
+/**
+ * Hook обработки server connection lifecycle.
+ */
+export type ServerConnectionLifecycleHook<TRuntimeContext = unknown> = (
+  connection: ServerConnectionLifecycle<TRuntimeContext>
+) => MaybePromise<void>;
 
 /**
  * Набор command policy-контрактов, зарегистрированных в runtime по command name.
@@ -613,6 +759,34 @@ export type ExecuteServerEventOptions<TRuntimeContext = unknown> =
   ServerRuntimeContextOption<TRuntimeContext>;
 
 /**
+ * Набор базовых lifecycle hooks server runtime.
+ */
+export interface ServerLifecycleHooks<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> {
+  /**
+   * Вызывается после успешной transport-авторизации и открытия соединения.
+   */
+  readonly onConnect?: ServerConnectionLifecycleHook<TRuntimeContext>;
+
+  /**
+   * Вызывается во время transport disconnect cleanup.
+   */
+  readonly onDisconnect?: ServerConnectionLifecycleHook<TRuntimeContext>;
+
+  /**
+   * Вызывается после успешного добавления membership в channel instance.
+   */
+  readonly onJoin?: ServerJoinLifecycleHook<TRegistry, TRuntimeContext>;
+
+  /**
+   * Вызывается после успешного удаления membership из channel instance.
+   */
+  readonly onLeave?: ServerLeaveLifecycleHook<TRegistry, TRuntimeContext>;
+}
+
+/**
  * Server-specific execution context для channel join pipeline.
  */
 export interface ServerChannelJoinExecution<
@@ -652,6 +826,81 @@ export interface ChannelMembership<
   TChannel extends ChannelContract = ChannelContract,
   TRuntimeContext = unknown
 > extends ServerChannelJoinExecution<TChannel, TRuntimeContext> {}
+
+/**
+ * Server-specific execution context для channel leave lifecycle.
+ */
+export interface ServerChannelLeaveExecution<
+  TChannel extends ChannelContract = ChannelContract,
+  TRuntimeContext = unknown
+> {
+  /**
+   * Контракт канала, из которого идет leave.
+   */
+  readonly contract: TChannel;
+
+  /**
+   * Имя channel template.
+   */
+  readonly name: TChannel["name"];
+
+  /**
+   * Нормализованный channel key конкретного instance.
+   */
+  readonly key: ChannelKey<TChannel>;
+
+  /**
+   * Идентификатор участника в transport-agnostic форме.
+   */
+  readonly memberId: string;
+
+  /**
+   * Runtime-контекст, с которым membership был привязан к каналу.
+   */
+  readonly context: TRuntimeContext;
+}
+
+/**
+ * Hook обработки lifecycle join конкретного channel instance.
+ */
+export type ServerJoinLifecycleHook<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> = (
+  membership: ServerJoinLifecycleExecution<TRegistry, TRuntimeContext>
+) => MaybePromise<void>;
+
+/**
+ * Hook обработки lifecycle leave конкретного channel instance.
+ */
+export type ServerLeaveLifecycleHook<
+  TRegistry extends ContractRegistry = ContractRegistry,
+  TRuntimeContext = unknown
+> = (
+  execution: ServerLeaveLifecycleExecution<TRegistry, TRuntimeContext>
+) => MaybePromise<void>;
+
+/**
+ * Union-представление membership payload для lifecycle join hook.
+ */
+type ServerJoinLifecycleExecution<
+  TRegistry extends ContractRegistry,
+  TRuntimeContext
+> = TRegistry["channels"]["list"][number] extends infer TChannel extends
+  ChannelContract
+  ? ChannelMembership<TChannel, TRuntimeContext>
+  : never;
+
+/**
+ * Union-представление leave payload для lifecycle leave hook.
+ */
+type ServerLeaveLifecycleExecution<
+  TRegistry extends ContractRegistry,
+  TRuntimeContext
+> = TRegistry["channels"]["list"][number] extends infer TChannel extends
+  ChannelContract
+  ? ServerChannelLeaveExecution<TChannel, TRuntimeContext>
+  : never;
 
 /**
  * Набор join policy-контрактов, зарегистрированных в runtime по channel name.
@@ -733,13 +982,104 @@ export function createServerRuntime<
   const eventDeliverers = options.eventDeliverers ?? {};
   const channelJoinPolicies = options.channelJoinPolicies ?? {};
   const channelJoinAuthorizers = options.channelJoinAuthorizers ?? {};
+  const lifecycleHooks = options.lifecycleHooks ?? {};
+  const contractIntrospection = inspectContractRegistry(registry);
+  const connectionPolicyNames = Object.freeze(
+    connectionPolicies.map((policy) => policy.name)
+  );
+  const commandHandlerNames = Object.freeze(
+    Object.keys(commandHandlers)
+  ) as readonly CommandName<TRegistry>[];
+  const eventRouterNames = Object.freeze(
+    Object.keys(eventRouters)
+  ) as readonly EventName<TRegistry>[];
+  const eventDelivererNames = Object.freeze(
+    Object.keys(eventDeliverers)
+  ) as readonly EventName<TRegistry>[];
+  const activeChannelInstances = new Map<
+    string,
+    {
+      readonly contract: ChannelContract;
+      readonly name: string;
+      readonly key: ChannelKey<ChannelContract>;
+    }
+  >();
   const channelMemberships = new Map<
     string,
     Map<string, ChannelMembership<ChannelContract, TRuntimeContext>>
   >();
+  const lifecycleBridge = Object.freeze({
+    notifyConnected: async (
+      connection: ServerConnectionLifecycle<TRuntimeContext>
+    ) => {
+      if (lifecycleHooks.onConnect === undefined) {
+        return;
+      }
+
+      await callServerLifecycleHook(
+        () => lifecycleHooks.onConnect!(freezeServerConnectionLifecycle(connection)),
+        {
+          stage: "connect",
+          target: connection.connectionId
+        }
+      );
+    },
+    notifyDisconnected: async (
+      connection: ServerConnectionLifecycle<TRuntimeContext>
+    ) => {
+      if (lifecycleHooks.onDisconnect === undefined) {
+        return;
+      }
+
+      await callServerLifecycleHook(
+        () =>
+          lifecycleHooks.onDisconnect!(
+            freezeServerConnectionLifecycle(connection)
+          ),
+        {
+          stage: "disconnect",
+          target: connection.connectionId
+        }
+      );
+    }
+  });
 
   return Object.freeze({
     registry,
+    [SERVER_RUNTIME_LIFECYCLE_BRIDGE]: lifecycleBridge,
+    inspectContracts() {
+      return contractIntrospection;
+    },
+    inspectRuntime() {
+      const activeChannels = Object.freeze(
+        [...activeChannelInstances.entries()].map(([bucketKey, instance]) => {
+          const membershipBucket = channelMemberships.get(bucketKey);
+          const memberIds = Object.freeze(
+            membershipBucket === undefined ? [] : [...membershipBucket.keys()]
+          );
+
+          return Object.freeze({
+            contract: instance.contract,
+            name: instance.name,
+            key: instance.key,
+            memberCount: memberIds.length,
+            memberIds
+          });
+        })
+      ) as readonly ServerRuntimeActiveChannelDebug<
+        TRegistry["channels"]["list"][number]
+      >[];
+
+      return Object.freeze({
+        state: "ready" as const,
+        contracts: contractIntrospection,
+        connectionPolicyNames,
+        commandHandlerNames,
+        eventRouterNames,
+        eventDelivererNames,
+        activeChannels
+      });
+    },
     async authorizeConnection(
       executionOptions?: ExecuteServerConnectionOptions<TRuntimeContext>
     ) {
@@ -1081,7 +1421,29 @@ export function createServerRuntime<
         channelMemberships.set(membershipBucketKey, membershipBucket);
       }
 
+      activeChannelInstances.set(membershipBucketKey, {
+        contract,
+        name: contract.name,
+        key: instance.key
+      });
       membershipBucket.set(executionOptions.memberId, membership);
+
+      if (lifecycleHooks.onJoin !== undefined) {
+        try {
+          await lifecycleHooks.onJoin(
+            membership as ServerJoinLifecycleExecution<TRegistry, TRuntimeContext>
+          );
+        } catch (error) {
+          membershipBucket.delete(executionOptions.memberId);
+
+          if (membershipBucket.size === 0) {
+            channelMemberships.delete(membershipBucketKey);
+            activeChannelInstances.delete(membershipBucketKey);
+          }
+
+          throw normalizeServerLifecycleError(error, "join", name);
+        }
+      }
 
       return membership;
     },
@@ -1117,10 +1479,38 @@ export function createServerRuntime<
         return false;
       }
 
+      const membership = membershipBucket.get(
+        executionOptions.memberId
+      ) as ChannelMembership<ChannelContract, TRuntimeContext> | undefined;
       const deleted = membershipBucket.delete(executionOptions.memberId);
 
       if (membershipBucket.size === 0) {
         channelMemberships.delete(membershipBucketKey);
+        activeChannelInstances.delete(membershipBucketKey);
+      }
+
+      if (deleted && membership !== undefined && lifecycleHooks.onLeave !== undefined) {
+        const leaveExecution = Object.freeze({
+          contract: membership.contract,
+          name: membership.name,
+          key: membership.key,
+          memberId: membership.memberId,
+          context: membership.context
+        }) as ServerChannelLeaveExecution<ChannelContract, TRuntimeContext>;
+
+        await callServerLifecycleHook(
+          () =>
+            lifecycleHooks.onLeave!(
+              leaveExecution as ServerLeaveLifecycleExecution<
+                TRegistry,
+                TRuntimeContext
+              >
+            ),
+          {
+            stage: "leave",
+            target: name
+          }
+        );
       }
 
       return deleted;
@@ -1155,7 +1545,7 @@ export function createServerRuntime<
         TRuntimeContext
       >[];
     }
-  }) as ServerRuntime<TRuntimeContext, TRegistry>;
+  }) as unknown as ServerRuntime<TRuntimeContext, TRegistry>;
 }
 
 /**
@@ -1191,6 +1581,9 @@ export function defineServerRuntime<
   TChannelJoinAuthorizers extends
     | ServerChannelJoinAuthorizers<TRegistry, any>
     | undefined = undefined,
+  TLifecycleHooks extends
+    | ServerLifecycleHooks<TRegistry, any>
+    | undefined = undefined,
   TRuntimeContext = InferServerRuntimeContext<
     TConnectionPolicies,
     TCommandPolicies,
@@ -1200,7 +1593,8 @@ export function defineServerRuntime<
     TEventReceivePolicies,
     TEventDeliverers,
     TChannelJoinPolicies,
-    TChannelJoinAuthorizers
+    TChannelJoinAuthorizers,
+    TLifecycleHooks
   >
 >(
   options: DefineServerRuntimeOptions<
@@ -1214,10 +1608,22 @@ export function defineServerRuntime<
     TEventDeliverers,
     TChannelJoinPolicies,
     TChannelJoinAuthorizers,
+    TLifecycleHooks,
     TRuntimeContext
   >
 ): ServerRuntime<TRuntimeContext, TRegistry> {
   return createServerRuntime<TRuntimeContext, TRegistry>(options);
+}
+
+interface ServerRuntimeLifecycleBridge<TRuntimeContext = unknown> {
+  readonly [SERVER_RUNTIME_LIFECYCLE_BRIDGE]: {
+    readonly notifyConnected: (
+      connection: ServerConnectionLifecycle<TRuntimeContext>
+    ) => Promise<void>;
+    readonly notifyDisconnected: (
+      connection: ServerConnectionLifecycle<TRuntimeContext>
+    ) => Promise<void>;
+  };
 }
 
 function normalizeCommandPipelineError(
@@ -1280,11 +1686,54 @@ function normalizeChannelJoinError(
   });
 }
 
+function normalizeServerLifecycleError(
+  error: unknown,
+  stage: "connect" | "disconnect" | "join" | "leave",
+  target: string
+) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Server lifecycle hook failed at stage "${stage}": "${target}".`,
+    details: {
+      stage,
+      target
+    },
+    cause: error
+  });
+}
+
 function getChannelMembershipBucketKey(
   channelName: string,
   key: ChannelKey<ChannelContract>
 ): string {
-  return `${channelName}:${JSON.stringify(key)}`;
+  return stringifyChannelInstance(channelName, key);
+}
+
+async function callServerLifecycleHook(
+  run: () => Promise<void> | void,
+  options: {
+    readonly stage: "connect" | "disconnect" | "join" | "leave";
+    readonly target: string;
+  }
+) {
+  try {
+    await run();
+  } catch (error) {
+    throw normalizeServerLifecycleError(error, options.stage, options.target);
+  }
+}
+
+function freezeServerConnectionLifecycle<TRuntimeContext>(
+  connection: ServerConnectionLifecycle<TRuntimeContext>
+): ServerConnectionLifecycle<TRuntimeContext> {
+  return Object.freeze({
+    connectionId: connection.connectionId,
+    context: connection.context
+  });
 }
 
 /**

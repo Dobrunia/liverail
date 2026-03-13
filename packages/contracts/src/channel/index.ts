@@ -24,6 +24,13 @@ export interface ChannelContract<
    * Schema ключа конкретного instance канала.
    */
   readonly key: TKeySchema;
+
+  /**
+   * Создает конкретный typed instance канала через официальный helper.
+   */
+  of(
+    key: ResolveSchemaInput<TKeySchema>
+  ): ChannelInstance<ChannelContract<TName, TKeySchema>>;
 }
 
 /**
@@ -50,6 +57,11 @@ export interface ChannelInstance<TChannel extends ChannelContract = ChannelContr
    * Валидированный ключ конкретного channel instance.
    */
   readonly key: ChannelKey<TChannel>;
+
+  /**
+   * Канонический сериализованный идентификатор channel instance.
+   */
+  readonly id: string;
 }
 
 /**
@@ -108,8 +120,15 @@ export function channel<
 
   assertContractSchema(options.key, "channel key");
 
-  return createPrimitive("channel", name, options, {
+  const primitive = createPrimitive("channel", name, options, {
     key: options.key
+  }) as ChannelContract<TName, TKeySchema>;
+
+  return deepFreeze({
+    ...primitive,
+    of(key: ResolveSchemaInput<TKeySchema>) {
+      return createChannelInstance(primitive, key);
+    }
   }) as ChannelContract<TName, TKeySchema>;
 }
 
@@ -134,9 +153,80 @@ export function createChannelInstance<TChannel extends ChannelContract>(
   contract: TChannel,
   key: ResolveSchemaInput<TChannel["key"]>
 ): ChannelInstance<TChannel> {
+  const parsedKey = parseChannelKey(contract, key);
+
   return deepFreeze({
     contract,
     name: contract.name,
-    key: parseChannelKey(contract, key)
+    key: parsedKey,
+    id: stringifyChannelInstance(contract.name, parsedKey)
   }) as ChannelInstance<TChannel>;
+}
+
+/**
+ * Сериализует channel instance или его нормализованные части в один
+ * канонический строковый идентификатор.
+ */
+export function stringifyChannelInstance<TChannel extends ChannelContract>(
+  instance: ChannelInstance<TChannel>
+): string;
+export function stringifyChannelInstance(
+  channelName: string,
+  key: ChannelKey<ChannelContract>
+): string;
+export function stringifyChannelInstance(
+  input: string | ChannelInstance,
+  key?: ChannelKey<ChannelContract>
+): string {
+  if (typeof input === "string") {
+    return `${input}:${JSON.stringify(key)}`;
+  }
+
+  return `${input.name}:${JSON.stringify(input.key)}`;
+}
+
+/**
+ * Разбирает канонический channel instance id и восстанавливает typed instance.
+ */
+export function parseChannelInstance<TChannel extends ChannelContract>(
+  contract: TChannel,
+  value: string
+): ChannelInstance<TChannel> {
+  const separatorIndex = value.indexOf(":");
+
+  if (separatorIndex <= 0) {
+    throw new TypeError("Channel instance id must contain a channel name and key.");
+  }
+
+  const channelName = value.slice(0, separatorIndex);
+  const serializedKey = value.slice(separatorIndex + 1);
+
+  if (channelName !== contract.name) {
+    throw new TypeError(
+      `Channel instance id belongs to another contract. Expected "${contract.name}", received "${channelName}".`
+    );
+  }
+
+  try {
+    return createChannelInstance(
+      contract,
+      JSON.parse(serializedKey) as ResolveSchemaInput<TChannel["key"]>
+    );
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new TypeError(`Channel instance id has an invalid serialized key: "${value}".`);
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Проверяет равенство двух channel instances по каноническому идентификатору.
+ */
+export function isSameChannelInstance(
+  left: ChannelInstance,
+  right: ChannelInstance
+): boolean {
+  return left.id === right.id;
 }

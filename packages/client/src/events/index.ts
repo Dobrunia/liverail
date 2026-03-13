@@ -1,4 +1,9 @@
-import type { EventContract, EventPayload } from "@liverail/contracts";
+import type {
+  EventContract,
+  EventPayload,
+  SystemEvent,
+  SystemEventName
+} from "@liverail/contracts";
 
 /**
  * Пользовательский listener конкретного typed события.
@@ -6,3 +11,10 @@ import type { EventContract, EventPayload } from "@liverail/contracts";
 export type ClientEventListener<
   TEvent extends EventContract = EventContract
 > = (payload: EventPayload<TEvent>) => void;
+
+/**
+ * Пользовательский listener конкретного typed system event.
+ */
+export type ClientSystemEventListener<
+  TName extends SystemEventName = SystemEventName
+> = (event: SystemEvent<TName>) => void;

@@ -428,7 +428,7 @@
 
 ### 10B.1 Runtime contract introspection
 
-- [ ] **Runtime contract introspection**  
+- [x] **Runtime contract introspection**  
        **Описание:** возможность получить из runtime явный список всех зарегистрированных commands, events и channels.  
        **Что делает:** дает серверу, клиенту, debug-инструментам и документации способ понять, какие realtime-сущности реально существуют в текущей сборке.  
        **Зачем нужна:** registry уже есть, но без удобного публичного способа его читать трудно делать debug, diagnostics и служебные инструменты.  
@@ -439,7 +439,7 @@
 
 ### 10B.2 Runtime health and debug utilities
 
-- [ ] **Runtime health and debug utilities**  
+- [x] **Runtime health and debug utilities**  
        **Описание:** базовые утилиты для отладки текущего состояния realtime runtime.  
        **Что делает:** позволяет посмотреть, какие контракты зарегистрированы, какие каналы активны, сколько подписчиков у каналов, какие handlers подключены и в каком состоянии находится runtime.  
        **Зачем нужна:** без этого даже при правильной архитектуре отладка realtime остается неудобной и слишком “черным ящиком”.  
@@ -450,7 +450,7 @@
 
 ### 10B.3 Client connection lifecycle model
 
-- [ ] **Client connection lifecycle model**  
+- [x] **Client connection lifecycle model**  
        **Описание:** явная модель состояний клиентского realtime-подключения.  
        **Что делает:** вводит понятные состояния вроде `idle`, `connecting`, `connected`, `reconnecting`, `disconnected`, `failed`, чтобы клиентский код не строил это хаотично сам.  
        **Зачем нужна:** reconnect-safe подписки уже есть, но без общей lifecycle-модели UI и обработчики все равно будут догадываться о состоянии соединения каждый по-своему.  
@@ -461,7 +461,7 @@
 
 ### 10B.4 Server lifecycle hooks
 
-- [ ] **Server lifecycle hooks**  
+- [x] **Server lifecycle hooks**  
        **Описание:** базовые hooks жизненного цикла на сервере, например `onConnect`, `onDisconnect`, `onJoin`, `onLeave`.  
        **Что делает:** дает понятные точки расширения для presence, cleanup, логики комнат и побочных действий, не заставляя размазывать такую логику по handlers.  
        **Зачем нужна:** в realtime-приложениях такие точки почти всегда нужны, и это не advanced-экзотика, а обычная эксплуатационная потребность.  
@@ -472,7 +472,7 @@
 
 ### 10B.5 System event model
 
-- [ ] **System event model**  
+- [x] **System event model**  
        **Описание:** отдельная модель системных realtime-событий, не относящихся к доменной логике продукта.  
        **Что делает:** формализует такие вещи, как `connected`, `disconnected`, `reconnect_started`, `reconnect_succeeded`, `join_failed` и другие служебные состояния.  
        **Зачем нужна:** без этого клиентский код и UI будут вручную интерпретировать внутренние состояния runtime, а LLM снова начнет путаться в “почти-событиях”.  
@@ -483,7 +483,7 @@
 
 ### 10B.6 Channel instance utilities
 
-- [ ] **Channel instance utilities**  
+- [x] **Channel instance utilities**  
        **Описание:** утилиты для создания, нормализации, сравнения и представления конкретных channel instances.  
        **Что делает:** дает единый способ работать с `channel.of(...)`, stringify/parse и равенством каналов, чтобы адресация не расползалась по проекту.  
        **Зачем нужна:** channel contracts уже есть, но на практике много мелкого хаоса возникает именно в работе с конкретными инстансами каналов.  
@@ -494,7 +494,7 @@
 
 ### 10B.7 Unsubscribe and cleanup guarantees
 
-- [ ] **Unsubscribe and cleanup guarantees**  
+- [x] **Unsubscribe and cleanup guarantees**  
        **Описание:** явная модель корректной отписки и очистки клиентских и серверных ресурсов.  
        **Что делает:** гарантирует, что подписки, listeners, channel membership и связанные runtime-ресурсы освобождаются предсказуемо, а не “как получится”.  
        **Зачем нужна:** это обычная и очень практическая проблема realtime-кода; без явной модели cleanup легко получить утечки listeners, зависшие membership и странное поведение после reconnect.  
@@ -505,7 +505,7 @@
 
        ### 10B.8 Package boundary and tree-shaking safety
 
-- [ ] **Package boundary and tree-shaking safety**  
+- [x] **Package boundary and tree-shaking safety**  
        **Описание:** проверка и настройка структуры пакетов так, чтобы каждый пакет тянул только действительно нужный код и зависимости.  
        **Что делает:** гарантирует, что `client` не импортирует `server`, `server` не тянет клиентский runtime, а `contracts` остается легким shared-пакетом без лишних runtime-зависимостей. Также делает публичные entrypoints и сборку совместимыми с tree shaking.  
        **Зачем нужна:** без этого монорепа может формально быть разделена на пакеты, но фактически пользователь будет тянуть лишние зависимости, лишний код или неиспользуемые модули. Это особенно важно для клиентского пакета и browser bundle.  

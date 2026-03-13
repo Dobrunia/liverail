@@ -1,4 +1,4 @@
-import { createSocketIoClientTransport } from "../src/index.js";
+import { createSocketIoClientTransport } from "../src/socket-io-entry.js";
 
 /**
  * Проверяет на уровне типов, что Socket.IO client transport можно создать

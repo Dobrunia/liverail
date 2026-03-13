@@ -58,5 +58,5 @@ test("should store event payload and channel key schemas consistently", () => {
   assert.equal(eventContract.payload, payloadSchema);
   assert.equal(channelContract.key, keySchema);
   assert.deepEqual(Object.keys(eventContract), ["kind", "name", "payload"]);
-  assert.deepEqual(Object.keys(channelContract), ["kind", "name", "key"]);
+  assert.deepEqual(Object.keys(channelContract), ["kind", "name", "key", "of"]);
 });

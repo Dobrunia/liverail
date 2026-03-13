@@ -13,9 +13,9 @@ import {
 } from "@liverail/contracts";
 import {
   createClientRuntime,
-  createSocketIoClientTransport,
   type ClientTransport
 } from "../src/index.js";
+import { createSocketIoClientTransport } from "../src/socket-io-entry.js";
 
 /**
  * Проверяет на уровне типов, что Socket.IO client adapter собирается в обычный

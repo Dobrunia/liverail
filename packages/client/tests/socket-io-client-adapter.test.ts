@@ -15,16 +15,18 @@ import {
   isRealtimeError
 } from "@liverail/contracts";
 import {
-  createServerRuntime,
+  createServerRuntime
+} from "../../server/src/index.ts";
+import {
   createSocketIoChannelRoute,
   createSocketIoEventDeliverer,
   createSocketIoServerAdapter,
   SOCKET_IO_COMMAND_EVENT
-} from "@liverail/server";
+} from "../../server/src/socket-io-entry.ts";
 import {
-  createClientRuntime,
-  createSocketIoClientTransport
+  createClientRuntime
 } from "../src/index.ts";
+import { createSocketIoClientTransport } from "../src/socket-io-entry.ts";
 
 /**
  * Проверяет, что Socket.IO client adapter реально подключает client runtime к

@@ -14,7 +14,9 @@ import {
   event
 } from "@liverail/contracts";
 import {
-  createServerRuntime,
+  createServerRuntime
+} from "../src/index.ts";
+import {
   createSocketIoChannelRoute,
   createSocketIoEventDeliverer,
   createSocketIoServerAdapter,
@@ -22,7 +24,7 @@ import {
   SOCKET_IO_CHANNEL_JOIN_EVENT,
   SOCKET_IO_CHANNEL_LEAVE_EVENT,
   SOCKET_IO_COMMAND_EVENT
-} from "../src/index.ts";
+} from "../src/socket-io-entry.ts";
 
 /**
  * Проверяет, что Socket.IO server adapter остается тонким transport-слоем:
