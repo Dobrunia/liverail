@@ -223,7 +223,7 @@
 ## 6. Client Runtime
 
 ### 6.1 Client runtime core
-- [ ] **Client runtime core**
+- [x] **Client runtime core**
   **Описание:** базовый клиентский runtime.
   **Что делает:** становится единым входом для command/subscribe/on.
   **Зачем нужна:** без него клиент будет работать с raw transport API.
@@ -233,7 +233,7 @@
   **Почему здесь:** это фундамент клиентской части.
 
 ### 6.2 Typed command client API
-- [ ] **Typed command client API**
+- [x] **Typed command client API**
   **Описание:** typed отправка команд и получение ack.
   **Что делает:** заменяет raw `emit` на контрактный вызов.
   **Зачем нужна:** это базовый client-to-server flow.
@@ -243,7 +243,7 @@
   **Почему здесь:** это первый полезный capability клиента.
 
 ### 6.3 Typed channel subscription API
-- [ ] **Typed channel subscription API**
+- [x] **Typed channel subscription API**
   **Описание:** typed subscribe/unsubscribe для каналов.
   **Что делает:** убирает хаос из комнат и подписок на клиенте.
   **Зачем нужна:** подписки — базовая часть realtime UI.
@@ -253,7 +253,7 @@
   **Почему здесь:** после команд клиент должен уметь подписываться.
 
 ### 6.4 Typed event listener API
-- [ ] **Typed event listener API**
+- [x] **Typed event listener API**
   **Описание:** подписка на конкретные typed events.
   **Что делает:** позволяет получать validated payload без raw listener-ов.
   **Зачем нужна:** это основной consumer-side механизм.
