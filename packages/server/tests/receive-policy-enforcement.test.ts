@@ -176,6 +176,101 @@ test("should skip denied deliveries for boolean and explicit receive policy resu
 });
 
 /**
+ * Проверяет, что receive policy deny теперь наблюдаем снаружи через отдельный
+ * report API, а не теряется в молчаливой фильтрации delivery-потока.
+ * Это важно, потому что calling-side должен уметь отличить "событие никому не
+ * отправлялось" от "часть маршрутов была явно запрещена policy layer".
+ * Также покрывается corner case с одновременным boolean deny и explicit deny,
+ * чтобы report одинаково собирал оба сценария без срыва разрешенных доставок.
+ */
+test("should expose denied receive deliveries through the event emission report", async () => {
+  const deliveredTargets: string[] = [];
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  const runtime = createServerRuntime({
+    registry: createContractRegistry({
+      events: [messageCreated] as const
+    }),
+    eventReceivePolicies: {
+      "message-created": [
+        receivePolicy<
+          "is-not-blocked",
+          typeof messageCreated,
+          unknown,
+          ServerEventRoute
+        >("is-not-blocked", {
+          evaluate: ({ route }) => route.target !== "socket-2"
+        }),
+        receivePolicy<
+          "can-receive-message-created",
+          typeof messageCreated,
+          unknown,
+          ServerEventRoute
+        >("can-receive-message-created", {
+          evaluate: ({ route }) =>
+            route.target === "socket-3"
+              ? {
+                  allowed: false as const,
+                  code: "forbidden" as const,
+                  message: "Target cannot receive this event."
+                }
+              : true
+        })
+      ]
+    },
+    eventRouters: {
+      "message-created": () => [
+        {
+          target: "socket-1"
+        },
+        {
+          target: "socket-2"
+        },
+        {
+          target: "socket-3"
+        }
+      ]
+    },
+    eventDeliverers: {
+      "message-created": ({ route }) => {
+        deliveredTargets.push(route.target);
+      }
+    }
+  });
+
+  const report = await runtime.emitEventReport(
+    "message-created",
+    {
+      text: "hello"
+    },
+    {
+      context: {}
+    }
+  );
+
+  assert.deepEqual(deliveredTargets, ["socket-1"]);
+  assert.deepEqual(
+    report.delivered.map((delivery) => delivery.route.target),
+    ["socket-1"]
+  );
+  assert.deepEqual(
+    report.denied.map((delivery) => `${delivery.route.target}:${delivery.error.code}`),
+    ["socket-2:forbidden", "socket-3:forbidden"]
+  );
+  assert.equal(
+    report.denied[0]?.error.message,
+    'Event delivery is denied by policy: "is-not-blocked".'
+  );
+  assert.equal(
+    report.denied[1]?.error.message,
+    "Target cannot receive this event."
+  );
+});
+
+/**
  * Проверяет, что ошибка внутри receive policy не протекает наружу сырым
  * исключением и нормализуется как `internal-error` со stage `receive`.
  * Это важно, потому что delivery security должна пользоваться тем же error

@@ -25,6 +25,7 @@ import type {
   PolicyContract,
   PolicyResolution,
   RealtimeErrorCode,
+  RealtimeErrorPayload,
   ReceivePolicyContract,
   ResolveSchemaInput
 } from "@liverail/contracts";
@@ -357,6 +358,26 @@ export interface ServerRuntime<
       TRuntimeContext
     >[]
   >;
+
+  /**
+   * Исполняет event pipeline и возвращает подробный report по delivered/denied route.
+   */
+  emitEventReport<TName extends EventName<TRegistry>>(
+    name: TName,
+    payload: ResolveSchemaInput<TRegistry["events"]["byName"][TName]["payload"]>,
+    ...args: ServerEventArguments<TRuntimeContext>
+  ): Promise<{
+    readonly delivered: readonly ServerEventDelivery<
+      TRegistry["events"]["byName"][TName],
+      TRuntimeContext
+    >[];
+    readonly denied: readonly (ServerEventDelivery<
+      TRegistry["events"]["byName"][TName],
+      TRuntimeContext
+    > & {
+      readonly error: RealtimeErrorPayload;
+    })[];
+  }>;
 
   /**
    * Добавляет участника в typed channel instance.
@@ -692,6 +713,37 @@ export interface ServerEventDelivery<
 }
 
 /**
+ * Наблюдаемая запись route, которую receive policy явно запретила.
+ */
+interface ServerDeniedEventDelivery<
+  TEvent extends EventContract = EventContract,
+  TRuntimeContext = unknown
+> extends ServerEventDelivery<TEvent, TRuntimeContext> {
+  /**
+   * Нормализованная realtime-ошибка конкретного deny-решения.
+   */
+  readonly error: RealtimeErrorPayload;
+}
+
+/**
+ * Подробный итог event emission с разделением доставленных и запрещенных route.
+ */
+interface ServerEventEmissionReport<
+  TEvent extends EventContract = EventContract,
+  TRuntimeContext = unknown
+> {
+  /**
+   * Route, которые реально дошли до deliverer-а.
+   */
+  readonly delivered: readonly ServerEventDelivery<TEvent, TRuntimeContext>[];
+
+  /**
+   * Route, которые были остановлены receive policy layer.
+   */
+  readonly denied: readonly ServerDeniedEventDelivery<TEvent, TRuntimeContext>[];
+}
+
+/**
  * Typed router для event emission pipeline.
  */
 export type ServerEventRouter<
@@ -1008,6 +1060,134 @@ export function createServerRuntime<
     string,
     Map<string, ChannelMembership<ChannelContract, TRuntimeContext>>
   >();
+
+  async function emitServerEventReport(
+    name: string,
+    payload: unknown,
+    executionOptions?: ExecuteServerEventOptions<TRuntimeContext>
+  ) {
+    const normalizedOptions =
+      executionOptions ??
+      ({} as ExecuteServerEventOptions<TRuntimeContext>);
+
+    const contract = registry.events.byName[
+      name as keyof typeof registry.events.byName
+    ] as EventContract | undefined;
+
+    if (contract === undefined) {
+      throw createUnknownServerContractError(
+        "event",
+        name,
+        Object.keys(registry.events.byName)
+      );
+    }
+
+    const router = eventRouters[
+      name as keyof typeof eventRouters
+    ] as ServerEventRouter<EventContract, TRuntimeContext> | undefined;
+
+    if (router === undefined) {
+      throw new TypeError(`No event router registered for event: ${name}.`);
+    }
+
+    const deliverer = eventDeliverers[
+      name as keyof typeof eventDeliverers
+    ] as ServerEventDeliverer<EventContract, TRuntimeContext> | undefined;
+    const receivePolicies = eventReceivePolicies[
+      name as keyof typeof eventReceivePolicies
+    ] as
+      | readonly ReceivePolicyContract<
+          string,
+          EventContract,
+          TRuntimeContext,
+          ServerEventRoute
+        >[]
+      | undefined;
+
+    if (deliverer === undefined) {
+      throw new TypeError(`No event deliverer registered for event: ${name}.`);
+    }
+
+    const parsedPayload = parseEventPayload(contract, payload);
+    const emission = {
+      contract,
+      name: contract.name,
+      payload: parsedPayload,
+      context: normalizedOptions.context as TRuntimeContext
+    } as ServerEventEmission<EventContract, TRuntimeContext>;
+
+    let routes:
+      | ServerEventRoute
+      | readonly ServerEventRoute[];
+
+    try {
+      routes = await router(emission);
+    } catch (error) {
+      throw normalizeEventEmissionError(error, name, "route");
+    }
+
+    const normalizedRoutes = Array.isArray(routes) ? routes : [routes];
+    const delivered: ServerEventDelivery<EventContract, TRuntimeContext>[] = [];
+    const denied: ServerDeniedEventDelivery<EventContract, TRuntimeContext>[] = [];
+
+    for (const route of normalizedRoutes) {
+      const delivery = {
+        ...emission,
+        route
+      } as ServerEventDelivery<EventContract, TRuntimeContext>;
+
+      if (receivePolicies !== undefined) {
+        let deniedError: RealtimeErrorPayload | undefined;
+
+        for (const policy of receivePolicies) {
+          try {
+            const result = await policy.evaluate(delivery);
+            const rejectionError = createPolicyRejectionError(
+              result,
+              "forbidden",
+              `Event delivery is denied by policy: "${policy.name}".`
+            );
+
+            if (rejectionError !== undefined) {
+              deniedError = rejectionError.toJSON();
+              break;
+            }
+          } catch (error) {
+            throw normalizePolicyEvaluationError(error, policy.name, "receive");
+          }
+        }
+
+        if (deniedError !== undefined) {
+          denied.push(
+            Object.freeze({
+              ...delivery,
+              error: deniedError
+            }) as ServerDeniedEventDelivery<EventContract, TRuntimeContext>
+          );
+          continue;
+        }
+      }
+
+      try {
+        await deliverer(delivery);
+      } catch (error) {
+        throw normalizeEventEmissionError(error, name, "deliver");
+      }
+
+      delivered.push(delivery);
+    }
+
+    return Object.freeze({
+      delivered: Object.freeze([...delivered]) as readonly ServerEventDelivery<
+        EventContract,
+        TRuntimeContext
+      >[],
+      denied: Object.freeze([...denied]) as readonly ServerDeniedEventDelivery<
+        EventContract,
+        TRuntimeContext
+      >[]
+    }) as ServerEventEmissionReport<EventContract, TRuntimeContext>;
+  }
   const lifecycleBridge = Object.freeze({
     notifyConnected: async (
       connection: ServerConnectionLifecycle<TRuntimeContext>
@@ -1226,109 +1406,16 @@ export function createServerRuntime<
       payload: unknown,
       executionOptions?: ExecuteServerEventOptions<TRuntimeContext>
     ) {
-      const normalizedOptions =
-        executionOptions ??
-        ({} as ExecuteServerEventOptions<TRuntimeContext>);
+      const report = await emitServerEventReport(name, payload, executionOptions);
 
-      const contract = registry.events.byName[
-        name as keyof typeof registry.events.byName
-      ] as EventContract | undefined;
-
-      if (contract === undefined) {
-        throw createUnknownServerContractError(
-          "event",
-          name,
-          Object.keys(registry.events.byName)
-        );
-      }
-
-      const router = eventRouters[
-        name as keyof typeof eventRouters
-      ] as ServerEventRouter<EventContract, TRuntimeContext> | undefined;
-
-      if (router === undefined) {
-        throw new TypeError(`No event router registered for event: ${name}.`);
-      }
-
-      const deliverer = eventDeliverers[
-        name as keyof typeof eventDeliverers
-      ] as ServerEventDeliverer<EventContract, TRuntimeContext> | undefined;
-      const receivePolicies = eventReceivePolicies[
-        name as keyof typeof eventReceivePolicies
-      ] as
-        | readonly ReceivePolicyContract<
-            string,
-            EventContract,
-            TRuntimeContext,
-            ServerEventRoute
-          >[]
-        | undefined;
-
-      if (deliverer === undefined) {
-        throw new TypeError(`No event deliverer registered for event: ${name}.`);
-      }
-
-      const parsedPayload = parseEventPayload(contract, payload);
-      const emission = {
-        contract,
-        name: contract.name,
-        payload: parsedPayload,
-        context: normalizedOptions.context as TRuntimeContext
-      } as ServerEventEmission<EventContract, TRuntimeContext>;
-
-      let routes:
-        | ServerEventRoute
-        | readonly ServerEventRoute[];
-
-      try {
-        routes = await router(emission);
-      } catch (error) {
-        throw normalizeEventEmissionError(error, name, "route");
-      }
-
-      const normalizedRoutes = Array.isArray(routes) ? routes : [routes];
-      const deliveries: ServerEventDelivery<EventContract, TRuntimeContext>[] = [];
-
-      for (const route of normalizedRoutes) {
-        const delivery = {
-          ...emission,
-          route
-        } as ServerEventDelivery<EventContract, TRuntimeContext>;
-
-        if (receivePolicies !== undefined) {
-          let isDenied = false;
-
-          for (const policy of receivePolicies) {
-            try {
-              const result = await policy.evaluate(delivery);
-
-              if (!isPolicyAllowed(result)) {
-                isDenied = true;
-                break;
-              }
-            } catch (error) {
-              throw normalizePolicyEvaluationError(error, policy.name, "receive");
-            }
-          }
-
-          if (isDenied) {
-            continue;
-          }
-        }
-
-        try {
-          await deliverer(delivery);
-        } catch (error) {
-          throw normalizeEventEmissionError(error, name, "deliver");
-        }
-
-        deliveries.push(delivery);
-      }
-
-      return Object.freeze([...deliveries]) as readonly ServerEventDelivery<
-        EventContract,
-        TRuntimeContext
-      >[];
+      return report.delivered;
+    },
+    async emitEventReport(
+      name: string,
+      payload: unknown,
+      executionOptions?: ExecuteServerEventOptions<TRuntimeContext>
+    ) {
+      return emitServerEventReport(name, payload, executionOptions);
     },
     async joinChannel(
       name: string,

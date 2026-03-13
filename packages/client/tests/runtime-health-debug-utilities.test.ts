@@ -73,6 +73,9 @@ test("should expose a read-only client runtime debug snapshot", async () => {
     name: "heartbeat",
     payload: {
       value: 1
+    },
+    route: {
+      target: "direct"
     }
   });
 

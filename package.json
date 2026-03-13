@@ -11,7 +11,7 @@
     "docs:readmes": "node ./scripts/generate-package-readmes.mjs",
     "docs:api": "node ./scripts/generate-api-references.mjs",
     "docs:generate": "npm run docs:readmes && npm run docs:api",
-    "typecheck": "tsc -p packages/contracts/tsconfig.json --noEmit && tsc -p packages/server/tsconfig.json --noEmit && tsc -p packages/client/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/contracts/tsconfig.json --noEmit && tsc -p packages/server/tsconfig.json --noEmit && tsc -p packages/client/tsconfig.json --noEmit && tsc -p example-app/tsconfig.json --noEmit",
     "test": "vitest run --config ./vitest.config.ts"
   },
   "devDependencies": {

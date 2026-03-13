@@ -1,0 +1,32 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@liverail/contracts": [
+        "../packages/contracts/src/index.ts"
+      ],
+      "@liverail/server": [
+        "../packages/server/src/index.ts"
+      ],
+      "@liverail/server/socket-io": [
+        "../packages/server/src/socket-io-entry.ts"
+      ],
+      "@liverail/client": [
+        "../packages/client/src/index.ts"
+      ],
+      "@liverail/client/socket-io": [
+        "../packages/client/src/socket-io-entry.ts"
+      ]
+    },
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

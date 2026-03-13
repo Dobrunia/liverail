@@ -412,10 +412,13 @@ export function createSocketIoChannelRoute(
   channelName: string,
   key: unknown
 ): ServerEventRoute {
+  const channelId = stringifyChannelInstance(channelName, key);
+
   return Object.freeze({
     target: SOCKET_IO_CHANNEL_ROUTE_TARGET,
     metadata: Object.freeze({
-      roomId: getSocketIoChannelRoom(channelName, key)
+      roomId: getSocketIoChannelRoom(channelName, key),
+      channelId
     })
   });
 }
@@ -445,7 +448,11 @@ export function createSocketIoEventDeliverer(
   return async (delivery) => {
     const roomId = readSocketIoRouteRoomId(delivery.route);
 
-    io.to(roomId).emit(delivery.name, delivery.payload);
+    io.to(roomId).emit(
+      delivery.name,
+      delivery.payload,
+      createSocketIoTransportEventRoute(delivery.route)
+    );
   };
 }
 
@@ -516,17 +523,38 @@ async function handleSocketIoChannelRequest<TRuntimeContext>(
           context
         }
       );
-
-      await socket.join(
-        getSocketIoChannelRoom(membership.name, membership.key)
+      const joinedChannel = {
+        name: membership.name,
+        key: membership.key
+      } satisfies SocketIoChannelRequest;
+      const roomId = getSocketIoChannelRoom(
+        joinedChannel.name,
+        joinedChannel.key
       );
+
+      try {
+        await socket.join(roomId);
+      } catch (error) {
+        try {
+          await runtime.leaveChannel(
+            joinedChannel.name,
+            joinedChannel.key,
+            {
+              memberId: socket.id
+            }
+          );
+        } catch {
+          // Rollback stays best-effort, but adapter must still surface the
+          // original transport binding error instead of masking it.
+        }
+
+        throw error;
+      }
+
       rememberJoinedSocketIoChannel(
         joinedChannelsBySocketId,
         socket.id,
-        {
-          name: membership.name,
-          key: membership.key
-        }
+        joinedChannel
       );
     } else {
       const channelContract = runtime.resolveChannel(channelRequest.name);
@@ -538,24 +566,40 @@ async function handleSocketIoChannelRequest<TRuntimeContext>(
       }
 
       const instance = createChannelInstance(channelContract, channelRequest.key);
+      const leftChannel = {
+        name: instance.name,
+        key: instance.key
+      } satisfies SocketIoChannelRequest;
+      let leftTransportChannel = false;
 
-      await runtime.leaveChannel(
-        instance.name,
-        instance.key,
-        {
-          memberId: socket.id
+      try {
+        await socket.leave(
+          getSocketIoChannelRoom(leftChannel.name, leftChannel.key)
+        );
+        leftTransportChannel = true;
+        await runtime.leaveChannel(
+          leftChannel.name,
+          leftChannel.key,
+          {
+            memberId: socket.id
+          }
+        );
+      } catch (error) {
+        if (leftTransportChannel) {
+          forgetJoinedSocketIoChannel(
+            joinedChannelsBySocketId,
+            socket.id,
+            leftChannel
+          );
         }
-      );
-      await socket.leave(
-        getSocketIoChannelRoom(instance.name, instance.key)
-      );
+
+        throw error;
+      }
+
       forgetJoinedSocketIoChannel(
         joinedChannelsBySocketId,
         socket.id,
-        {
-          name: instance.name,
-          key: instance.key
-        }
+        leftChannel
       );
     }
 
@@ -624,13 +668,18 @@ async function removeSocketIoChannelMemberships<TRuntimeContext>(
   joinedChannelsBySocketId.delete(socketId);
 
   for (const request of bucket.values()) {
-    await runtime.leaveChannel(
-      request.name,
-      request.key,
-      {
-        memberId: socketId
-      }
-    );
+    try {
+      await runtime.leaveChannel(
+        request.name,
+        request.key,
+        {
+          memberId: socketId
+        }
+      );
+    } catch {
+      // Disconnect cleanup must continue freeing the remaining memberships
+      // even if one leave hook or runtime path fails.
+    }
   }
 }
 
@@ -789,6 +838,47 @@ function readSocketIoRouteRoomId(route: ServerEventRoute): string {
   }
 
   throw new TypeError(`Unsupported Socket.IO route target: ${route.target}.`);
+}
+
+/**
+ * Преобразует server route в transport route payload для клиентского runtime.
+ */
+function createSocketIoTransportEventRoute(route: ServerEventRoute): {
+  readonly target: string;
+  readonly channelId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+} {
+  if (route.target === SOCKET_IO_CHANNEL_ROUTE_TARGET) {
+    const channelId = route.metadata?.channelId;
+
+    if (typeof channelId !== "string" || channelId.length === 0) {
+      throw new TypeError("Socket.IO channel routes require a non-empty channelId.");
+    }
+
+    if (route.metadata !== undefined) {
+      return Object.freeze({
+        target: route.target,
+        channelId,
+        metadata: route.metadata
+      });
+    }
+
+    return Object.freeze({
+      target: route.target,
+      channelId
+    });
+  }
+
+  if (route.metadata !== undefined) {
+    return Object.freeze({
+      target: route.target,
+      metadata: route.metadata
+    });
+  }
+
+  return Object.freeze({
+    target: route.target
+  });
 }
 
 function readRequestName(

@@ -340,6 +340,118 @@ test("should preserve the existing timeout model when Socket.IO command ack is m
   }
 });
 
+/**
+ * Проверяет, что реальный Socket.IO client adapter не сохраняет stale
+ * subscription state, если сервер отклонил автопереподписку после reconnect.
+ * Это важно, потому что старый gap проявлялся именно на transport boundary:
+ * reconnect выглядел успешным, но членство в канале уже не восстанавливалось,
+ * а клиент продолжал считать подписку активной. Также покрывается corner case
+ * с последующей event delivery: после failed resubscribe listener не должен
+ * получать channel event, а runtime обязан выдать `join_failed` и очистить
+ * локальную active subscription.
+ */
+test("should clear failed Socket.IO resubscriptions and stop delivering channel events after reconnect", async () => {
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  let allowJoin = true;
+  const registry = createContractRegistry({
+    channels: [voiceRoom] as const,
+    events: [messageCreated] as const
+  });
+  const runtime = createServerRuntime({
+    registry,
+    channelJoinAuthorizers: {
+      "voice-room": () => allowJoin
+    },
+    eventRouters: {
+      "message-created": () => createSocketIoChannelRoute("voice-room", {
+        roomId: "room-1"
+      })
+    },
+    eventDeliverers: {
+      "message-created": createSocketIoEventDeliverer(harness.io)
+    }
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+
+  const socket = createSocketClient(harness.url, {
+    autoConnect: false,
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+  const clientRuntime = createClientRuntime({
+    registry,
+    transport: createSocketIoClientTransport({
+      socket
+    })
+  });
+  const joinFailures: string[] = [];
+  let receivedPayload: { text: string } | undefined;
+
+  clientRuntime.onSystemEvent("join_failed", (event) => {
+    joinFailures.push(
+      `${event.payload.channelName}:${String((event.payload.key as { roomId: string }).roomId)}:${event.payload.error.code}`
+    );
+  });
+  clientRuntime.onEvent("message-created", (payload) => {
+    receivedPayload = payload;
+  });
+
+  try {
+    socket.connect();
+    await waitForSocketEvent(socket, "connect");
+
+    await clientRuntime.subscribeChannel("voice-room", {
+      roomId: "room-1"
+    });
+
+    const disconnected = waitForSocketEvent(socket, "disconnect");
+
+    socket.disconnect();
+    await disconnected;
+
+    allowJoin = false;
+
+    socket.connect();
+    await waitForSocketEvent(socket, "connect");
+    await wait(50);
+
+    await runtime.emitEvent("message-created", {
+      text: "should-not-arrive"
+    }, {
+      context: {}
+    });
+    await wait(50);
+
+    assert.deepEqual(joinFailures, [
+      "voice-room:room-1:join-denied"
+    ]);
+    assert.deepEqual(clientRuntime.inspectRuntime().activeSubscriptions, []);
+    assert.equal(receivedPayload, undefined);
+  } finally {
+    clientRuntime.destroy();
+    socket.disconnect();
+    await harness.close();
+  }
+});
+
 interface SocketIoHarness {
   readonly io: SocketIoServer;
   readonly url: string;

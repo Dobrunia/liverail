@@ -66,6 +66,9 @@ test("should register event appliers and apply state updates before listeners", 
     name: "message-created",
     payload: {
       text: "  first  "
+    },
+    route: {
+      target: "direct"
     }
   });
 
@@ -75,6 +78,9 @@ test("should register event appliers and apply state updates before listeners", 
     name: "message-created",
     payload: {
       text: "second"
+    },
+    route: {
+      target: "direct"
     }
   });
 
@@ -132,6 +138,9 @@ test("should report event applier failures without breaking event listeners", ()
     name: "message-created",
     payload: {
       text: "hello"
+    },
+    route: {
+      target: "direct"
     }
   });
 

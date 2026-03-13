@@ -84,6 +84,26 @@ export type ClientTransportConnectionReceiver = (
 ) => void;
 
 /**
+ * Transport-level контекст маршрута входящего события.
+ */
+interface ClientTransportEventRoute {
+  /**
+   * Логическая transport-цель конкретной доставки.
+   */
+  readonly target: string;
+
+  /**
+   * Необязательный канонический channel instance id для channel-scoped delivery.
+   */
+  readonly channelId?: string;
+
+  /**
+   * Дополнительные сериализуемые данные transport route.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+/**
  * Сырой inbound event, который transport передает в client runtime.
  */
 export interface ClientTransportEvent {
@@ -96,6 +116,11 @@ export interface ClientTransportEvent {
    * Сырой payload входящего события.
    */
   readonly payload: unknown;
+
+  /**
+   * Transport route конкретной доставки для correlation и cleanup safety.
+   */
+  readonly route: ClientTransportEventRoute;
 }
 
 /**

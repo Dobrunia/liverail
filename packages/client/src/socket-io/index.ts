@@ -285,7 +285,11 @@ function bindSocketIoEvents(
   joinEvent: string,
   leaveEvent: string
 ): () => void {
-  const onAny = (eventName: string, payload: unknown) => {
+  const onAny = (
+    eventName: string,
+    payload: unknown,
+    route: unknown
+  ) => {
     if (
       eventName === commandEvent ||
       eventName === joinEvent ||
@@ -296,7 +300,8 @@ function bindSocketIoEvents(
 
     receiver({
       name: eventName,
-      payload
+      payload,
+      route: readSocketIoClientEventRoute(route)
     });
   };
 
@@ -305,6 +310,73 @@ function bindSocketIoEvents(
   return () => {
     socket.offAny(onAny);
   };
+}
+
+/**
+ * Нормализует transport route входящего Socket.IO события в общий client shape.
+ */
+function readSocketIoClientEventRoute(route: unknown): {
+  readonly target: string;
+  readonly channelId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+} {
+  if (
+    typeof route === "object" &&
+    route !== null &&
+    typeof (route as { target?: unknown }).target === "string"
+  ) {
+    const normalizedRoute = {
+      target: (route as { target: string }).target
+    } as {
+      readonly target: string;
+      readonly channelId?: string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    };
+
+    if (typeof (route as { channelId?: unknown }).channelId === "string") {
+      const channelId = (route as { channelId: string }).channelId;
+
+      if (
+        typeof (route as { metadata?: unknown }).metadata === "object" &&
+        (route as { metadata?: unknown }).metadata !== null
+      ) {
+        return Object.freeze({
+          ...normalizedRoute,
+          channelId,
+          metadata: Object.freeze({
+            ...((route as {
+              metadata: Readonly<Record<string, unknown>>;
+            }).metadata)
+          })
+        });
+      }
+
+      return Object.freeze({
+        ...normalizedRoute,
+        channelId
+      });
+    }
+
+    if (
+      typeof (route as { metadata?: unknown }).metadata === "object" &&
+      (route as { metadata?: unknown }).metadata !== null
+    ) {
+      return Object.freeze({
+        ...normalizedRoute,
+        metadata: Object.freeze({
+          ...((route as {
+            metadata: Readonly<Record<string, unknown>>;
+          }).metadata)
+        })
+      });
+    }
+
+    return Object.freeze(normalizedRoute);
+  }
+
+  return Object.freeze({
+    target: "direct"
+  });
 }
 
 /**

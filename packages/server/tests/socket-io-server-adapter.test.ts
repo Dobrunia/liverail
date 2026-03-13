@@ -11,7 +11,8 @@ import {
   command,
   connectPolicy,
   createContractRegistry,
-  event
+  event,
+  receivePolicy
 } from "@liverail/contracts";
 import {
   createServerRuntime
@@ -19,6 +20,7 @@ import {
 import {
   createSocketIoChannelRoute,
   createSocketIoEventDeliverer,
+  getSocketIoChannelRoom,
   createSocketIoServerAdapter,
   createSocketIoSocketRoute,
   SOCKET_IO_CHANNEL_JOIN_EVENT,
@@ -318,6 +320,372 @@ test("should deliver runtime events to Socket.IO sockets and channel rooms", asy
     roomClient.disconnect();
     directClient.disconnect();
     ignoredClient.disconnect();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что receive policy enforcement не теряется при работе через
+ * реальный Socket.IO deliverer и channel routes: запрещенный route должен
+ * отфильтровываться еще до transport-доставки и не доходить до сокета.
+ * Это важно, потому что security-модель не должна зависеть от того, какой
+ * deliverer выбран поверх runtime; transport helper не должен обходить policy,
+ * если используется через официальный event pipeline. Также покрывается corner
+ * case с двумя channel route одного события, чтобы deny одного получателя не
+ * ломал доставку второму разрешенному подписчику.
+ */
+test("should enforce receive policies before Socket.IO channel delivery", async () => {
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  const allowedRoomId = getSocketIoChannelRoom("voice-room", {
+    roomId: "room-1"
+  });
+  const runtime = createServerRuntime<{ allowedRoomId: string }>({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const,
+      events: [messageCreated] as const
+    }),
+    eventReceivePolicies: {
+      "message-created": [
+        receivePolicy("can-receive-room-message", {
+          evaluate({ route, context }) {
+            return (
+              (
+                route.metadata as
+                  | {
+                      readonly roomId?: string;
+                    }
+                  | undefined
+              )?.roomId === context.allowedRoomId
+            );
+          }
+        })
+      ]
+    },
+    eventRouters: {
+      "message-created": () => [
+        createSocketIoChannelRoute("voice-room", {
+          roomId: "room-1"
+        }),
+        createSocketIoChannelRoute("voice-room", {
+          roomId: "room-2"
+        })
+      ]
+    },
+    eventDeliverers: {
+      "message-created": createSocketIoEventDeliverer(harness.io)
+    }
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {
+        allowedRoomId
+      };
+    }
+  });
+
+  const allowedClient = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+  const blockedClient = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await Promise.all([
+      waitForSocketEvent(allowedClient, "connect"),
+      waitForSocketEvent(blockedClient, "connect")
+    ]);
+
+    await emitWithAck(allowedClient, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+    await emitWithAck(blockedClient, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-2"
+      }
+    });
+
+    const allowedDelivery = waitForSocketEvent<{ text: string }>(
+      allowedClient,
+      "message-created"
+    );
+    let blockedReceived = false;
+
+    blockedClient.once("message-created", () => {
+      blockedReceived = true;
+    });
+
+    const deliveries = await runtime.emitEvent("message-created", {
+      text: "policy-checked"
+    }, {
+      context: {
+        allowedRoomId
+      }
+    });
+    await wait(50);
+
+    assert.equal(deliveries.length, 1);
+    assert.deepEqual(await allowedDelivery, {
+      text: "policy-checked"
+    });
+    assert.equal(blockedReceived, false);
+  } finally {
+    allowedClient.disconnect();
+    blockedClient.disconnect();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что неуспешный `socket.join()` не оставляет после себя runtime
+ * membership, если transport-level привязка комнаты сорвалась уже после
+ * успешной server-side авторизации и создания channel membership.
+ * Это важно, потому что иначе adapter будет возвращать ошибку join, но сервер
+ * продолжит считать клиента участником канала, что ломает cleanup и security-
+ * модель membership. Также покрывается corner case с transport failure после
+ * runtime join, чтобы adapter делал rollback, а не оставлял полусобранное
+ * состояние между runtime и Socket.IO.
+ */
+test("should rollback runtime membership when Socket.IO room join fails", async () => {
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const runtime = createServerRuntime({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const
+    })
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+
+  harness.io.on("connection", (socket) => {
+    socket.join = async () => {
+      throw new Error("Socket.IO room join failed.");
+    };
+  });
+
+  const client = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await waitForSocketEvent(client, "connect");
+
+    const joinResult = await emitWithAck<{
+      readonly ok?: boolean;
+      readonly error?: {
+        readonly code?: string;
+        readonly message?: string;
+        readonly details?: {
+          readonly stage?: string;
+        };
+      };
+    }>(client, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+
+    assert.equal(joinResult.ok, false);
+    assert.equal(joinResult.error?.code, "internal-error");
+    assert.equal(joinResult.error?.details?.stage, "join");
+    assert.match(
+      String(joinResult.error?.message),
+      /Socket\.IO channel operation failed at stage "join"/
+    );
+    assert.deepEqual(runtime.listChannelMembers("voice-room", {
+      roomId: "room-1"
+    }), []);
+  } finally {
+    client.disconnect();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что неуспешный `socket.leave()` не удаляет runtime membership
+ * раньше времени и не создает рассинхронизацию, когда transport еще держит
+ * клиента в комнате, а сервер уже считает его отписанным.
+ * Это важно, потому что именно такая рассинхронизация приводит к утечке
+ * событий после неудачного unsubscribe/leave и ломает заявленные cleanup
+ * guarantees. Также покрывается corner case с повторной успешной попыткой:
+ * после исправленного adapter-а leave можно повторить и получить чистое
+ * состояние без зависшей membership и без лишней доставки событий.
+ */
+test("should keep runtime and transport membership aligned when Socket.IO leave fails", async () => {
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  let failLeave = true;
+  const runtime = createServerRuntime({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const,
+      events: [messageCreated] as const
+    }),
+    eventRouters: {
+      "message-created": () => createSocketIoChannelRoute("voice-room", {
+        roomId: "room-1"
+      })
+    },
+    eventDeliverers: {
+      "message-created": createSocketIoEventDeliverer(harness.io)
+    }
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+
+  harness.io.on("connection", (socket) => {
+    const originalLeave = socket.leave.bind(socket);
+
+    socket.leave = async (...args) => {
+      if (failLeave) {
+        throw new Error("Socket.IO room leave failed.");
+      }
+
+      await originalLeave(...args);
+    };
+  });
+
+  const client = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await waitForSocketEvent(client, "connect");
+    await emitWithAck(client, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+
+    const failedLeaveResult = await emitWithAck<{
+      readonly ok?: boolean;
+      readonly error?: {
+        readonly code?: string;
+        readonly message?: string;
+        readonly details?: {
+          readonly stage?: string;
+        };
+      };
+    }>(client, SOCKET_IO_CHANNEL_LEAVE_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+
+    let leakedAfterFailedLeave: { text: string } | undefined;
+
+    client.once("message-created", (payload: { text: string }) => {
+      leakedAfterFailedLeave = payload;
+    });
+
+    await runtime.emitEvent("message-created", {
+      text: "still-subscribed"
+    }, {
+      context: {}
+    });
+    await wait(50);
+
+    assert.equal(failedLeaveResult.ok, false);
+    assert.equal(failedLeaveResult.error?.code, "internal-error");
+    assert.equal(failedLeaveResult.error?.details?.stage, "leave");
+    assert.match(
+      String(failedLeaveResult.error?.message),
+      /Socket\.IO channel operation failed at stage "leave"/
+    );
+    assert.equal(
+      runtime.listChannelMembers("voice-room", {
+        roomId: "room-1"
+      }).length,
+      1
+    );
+    assert.deepEqual(leakedAfterFailedLeave, {
+      text: "still-subscribed"
+    });
+
+    failLeave = false;
+
+    const successfulLeaveResult = await emitWithAck<{
+      readonly ok: true;
+    }>(client, SOCKET_IO_CHANNEL_LEAVE_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+    let receivedAfterSuccessfulLeave = false;
+
+    client.once("message-created", () => {
+      receivedAfterSuccessfulLeave = true;
+    });
+
+    await runtime.emitEvent("message-created", {
+      text: "after-successful-leave"
+    }, {
+      context: {}
+    });
+    await wait(50);
+
+    assert.deepEqual(successfulLeaveResult, {
+      ok: true
+    });
+    assert.deepEqual(runtime.listChannelMembers("voice-room", {
+      roomId: "room-1"
+    }), []);
+    assert.equal(receivedAfterSuccessfulLeave, false);
+  } finally {
+    client.disconnect();
     await harness.close();
   }
 });

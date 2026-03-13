@@ -94,6 +94,99 @@ test("should cleanup server memberships and lifecycle hooks when the Socket.IO a
   }
 });
 
+/**
+ * Проверяет, что disconnect-cleanup не обрывается после первой ошибки leave
+ * hook-а и продолжает снимать остальные memberships того же подключения.
+ * Это важно, потому что cleanup guarantees должны быть устойчивыми к частичным
+ * сбоям и не оставлять зависшие server-side memberships только потому, что
+ * один lifecycle hook завершился ошибкой. Также покрывается corner case с
+ * несколькими room membership одного сокета, чтобы cleanup проходил по всем
+ * каналам, а `onDisconnect` вызывался даже после сбоя одного `onLeave`.
+ */
+test("should cleanup all server memberships on disconnect even if one leave hook fails", async () => {
+  const leaveCalls: string[] = [];
+  const disconnectCalls: string[] = [];
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().trim().min(1)
+    })
+  });
+  const runtime = createServerRuntime<{ userId: string }>({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const
+    }),
+    lifecycleHooks: {
+      onLeave: (execution) => {
+        const key = execution.key as { roomId: string };
+
+        leaveCalls.push(key.roomId);
+
+        if (key.roomId === "room-1") {
+          throw new Error("Presence cleanup failed for room-1.");
+        }
+      },
+      onDisconnect: (connection) => {
+        disconnectCalls.push(`${connection.connectionId}:${connection.context.userId}`);
+      }
+    }
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {
+        userId: "user-1"
+      };
+    }
+  });
+
+  const socket = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await waitForSocketEvent(socket, "connect");
+    const connectionId = socket.id;
+
+    await emitWithAck(socket, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: " room-1 "
+      }
+    });
+    await emitWithAck(socket, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: " room-2 "
+      }
+    });
+
+    const disconnected = waitForSocketEvent(socket, "disconnect");
+
+    socket.disconnect();
+    await disconnected;
+    await wait(50);
+
+    assert.deepEqual(runtime.listChannelMembers("voice-room", {
+      roomId: "room-1"
+    }), []);
+    assert.deepEqual(runtime.listChannelMembers("voice-room", {
+      roomId: "room-2"
+    }), []);
+    assert.deepEqual(leaveCalls.sort(), ["room-1", "room-2"]);
+    assert.deepEqual(disconnectCalls, [
+      `${connectionId}:user-1`
+    ]);
+  } finally {
+    socket.disconnect();
+    await harness.close();
+  }
+});
+
 interface SocketIoHarness {
   readonly io: SocketIoServer;
   readonly url: string;

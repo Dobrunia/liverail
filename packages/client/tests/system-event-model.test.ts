@@ -125,3 +125,67 @@ test("should publish join failures through the dedicated system event model", as
     "voice-room:room-1:join-denied"
   ]);
 });
+
+/**
+ * Проверяет, что ошибка автопереподписки после reconnect тоже публикуется как
+ * официальный `join_failed`, а не остается только во внутреннем error hook.
+ * Это важно, потому что lifecycle UI и recovery-логика должны видеть не только
+ * первичный subscribe failure, но и провал восстановления уже существовавшей
+ * подписки после reconnect. Также покрывается corner case с удалением stale
+ * subscription state, чтобы system event сопровождался реальным снятием
+ * локальной активной подписки, а не декоративным уведомлением поверх старого
+ * рассинхронизированного состояния.
+ */
+test("should publish resubscription failures through the dedicated system event model", async () => {
+  let connectionReceiver: ClientTransportConnectionReceiver | undefined;
+  let subscribeCallCount = 0;
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().trim().min(1)
+    })
+  });
+  const seenEvents: string[] = [];
+  const runtime = createClientRuntime({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const
+    }),
+    transport: {
+      bindConnection(nextReceiver) {
+        connectionReceiver = nextReceiver;
+      },
+      async subscribeChannel() {
+        subscribeCallCount += 1;
+
+        if (subscribeCallCount > 1) {
+          throw new Error("Resubscribe failed.");
+        }
+      },
+      async unsubscribeChannel() {
+        return undefined;
+      }
+    }
+  });
+
+  runtime.onSystemEvent("join_failed", (event) => {
+    seenEvents.push(
+      `${event.payload.channelName}:${String((event.payload.key as { roomId: string }).roomId)}:${event.payload.error.code}`
+    );
+  });
+
+  await runtime.subscribeChannel("voice-room", {
+    roomId: " room-1 "
+  });
+
+  connectionReceiver?.({
+    status: "disconnected"
+  });
+  connectionReceiver?.({
+    status: "connected"
+  });
+  await Promise.resolve();
+
+  assert.deepEqual(seenEvents, [
+    "voice-room:room-1:internal-error"
+  ]);
+  assert.deepEqual(runtime.inspectRuntime().activeSubscriptions, []);
+});

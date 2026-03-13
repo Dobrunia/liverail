@@ -72,16 +72,20 @@ test("should restore active channel subscriptions after reconnect", async () => 
 });
 
 /**
- * Проверяет, что ошибка автопереподписки после reconnect не теряет desired
- * subscription state и репортится через общий client error hook.
- * Это важно, потому что reconnect-поток должен быть наблюдаемым и не должен
- * тихо съедать transport failures при восстановлении подписок.
- * Также покрывается corner case с raw Error, чтобы runtime нормализовал его в
- * общий realtime error shape и использовал отдельный stage `resubscribe`.
+ * Проверяет, что неуспешная автопереподписка после reconnect не оставляет
+ * ложное локальное состояние "подписка активна", а переводит этот случай в
+ * наблюдаемый failure через error hook и system event `join_failed`.
+ * Это важно, потому что именно рассинхронизация между клиентским runtime и
+ * сервером делала старую реализацию небезопасной: UI видел active subscription,
+ * хотя сервер мог уже не восстановить membership. Также покрывается corner case
+ * с raw Error, чтобы runtime нормализовал transport-сбой в официальный
+ * realtime error shape со stage `resubscribe` и больше не пытался повторно
+ * восстанавливать уже проваленную подписку на следующих reconnect.
  */
-test("should report resubscription failures through the client error hook", async () => {
+test("should clear failed resubscriptions from runtime state and report them through error and system hooks", async () => {
   let connectionReceiver: ClientTransportConnectionReceiver | undefined;
   const capturedErrors: unknown[] = [];
+  const joinFailures: string[] = [];
   let subscribeCallCount = 0;
   const voiceRoom = channel("voice-room", {
     key: z.object({
@@ -112,6 +116,12 @@ test("should report resubscription failures through the client error hook", asyn
     }
   });
 
+  runtime.onSystemEvent("join_failed", (event) => {
+    joinFailures.push(
+      `${event.payload.channelName}:${String((event.payload.key as { roomId: string }).roomId)}:${event.payload.error.code}`
+    );
+  });
+
   await runtime.subscribeChannel("voice-room", {
     roomId: "room-1"
   });
@@ -130,6 +140,10 @@ test("should report resubscription failures through the client error hook", asyn
     channelName: "voice-room",
     stage: "resubscribe"
   });
+  assert.deepEqual(joinFailures, [
+    "voice-room:room-1:internal-error"
+  ]);
+  assert.deepEqual(runtime.inspectRuntime().activeSubscriptions, []);
 
   connectionReceiver?.({
     status: "disconnected"
@@ -139,5 +153,5 @@ test("should report resubscription failures through the client error hook", asyn
   });
   await Promise.resolve();
 
-  assert.equal(subscribeCallCount, 3);
+  assert.equal(subscribeCallCount, 2);
 });

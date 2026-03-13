@@ -359,6 +359,7 @@ export function createClientRuntime<
   >();
   const transportEventReceiver = createTransportEventReceiver(
     registry,
+    channelSubscriptions,
     eventAppliers,
     eventListeners,
     onError
@@ -374,6 +375,9 @@ export function createClientRuntime<
     channelSubscriptions,
     transport,
     onError,
+    (payload) => {
+      emitSystemEvent("join_failed", payload);
+    },
     (event) => {
       transitionClientConnectionState(event.status, event.error);
     }
@@ -909,11 +913,14 @@ export function createClientRuntime<
 /**
  * Создает receiver lifecycle-событий transport соединения и безопасно
  * восстанавливает активные подписки после reconnect.
+ * Если повторная подписка не удалась, runtime не оставляет ложное `active`
+ * состояние локально и публикует официальный `join_failed`.
  */
 function createTransportConnectionReceiver(
   channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
   transport: ClientTransport | undefined,
   onError: ClientRuntimeErrorHandler | undefined,
+  onResubscribeFailure: (payload: SystemEventPayload<"join_failed">) => void,
   onConnectionEvent: (event: ClientTransportConnectionEvent) => void
 ): ClientTransportConnectionReceiver {
   let shouldResubscribe = false;
@@ -953,19 +960,21 @@ function createTransportConnectionReceiver(
 
       void Promise.resolve(transport.subscribeChannel(request)).catch(
         (error: unknown) => {
-        if (isRealtimeError(error)) {
-          reportClientRuntimeError(error, onError);
-          return;
-        }
+          const normalizedError = isRealtimeError(error)
+            ? error
+            : normalizeClientChannelTransportError(
+                error,
+                subscription.name,
+                "resubscribe"
+              );
 
-        reportClientRuntimeError(
-          normalizeClientChannelTransportError(
-            error,
-            subscription.name,
-            "resubscribe"
-          ),
-          onError
-        );
+          channelSubscriptions.delete(subscription.id);
+          reportClientRuntimeError(normalizedError, onError);
+          onResubscribeFailure({
+            channelName: subscription.name,
+            key: subscription.key,
+            error: normalizedError.toJSON()
+          });
         }
       );
     }
@@ -979,6 +988,7 @@ function createTransportConnectionReceiver(
  */
 function createTransportEventReceiver(
   registry: ContractRegistry,
+  channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
   eventAppliers: Map<string, Set<RegisteredClientEventApplier>>,
   eventListeners: Map<string, Set<ClientEventListener<EventContract>>>,
   onError: ClientRuntimeErrorHandler | undefined
@@ -989,6 +999,21 @@ function createTransportEventReceiver(
     ] as EventContract | undefined;
 
     if (contract === undefined) {
+      return;
+    }
+
+    if (
+      event.route.channelId !== undefined &&
+      !channelSubscriptions.has(event.route.channelId)
+    ) {
+      reportClientRuntimeError(
+        normalizeClientEventRouteMismatchError(
+          contract.name,
+          event.route.channelId,
+          event.route.target
+        ),
+        onError
+      );
       return;
     }
 
@@ -1141,6 +1166,27 @@ function normalizeClientEventApplierError(
       stage: "apply"
     },
     cause: error
+  });
+}
+
+/**
+ * Нормализует stray inbound delivery, которая больше не соответствует
+ * локальному channel subscription state клиента.
+ */
+function normalizeClientEventRouteMismatchError(
+  eventName: string,
+  channelId: string,
+  target: string
+) {
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Inbound event delivery does not match an active channel subscription: "${eventName}".`,
+    details: {
+      eventName,
+      channelId,
+      target,
+      stage: "route"
+    }
   });
 }
 

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 
 import {
+  channel,
   createContractRegistry,
   event,
   isRealtimeError
@@ -48,6 +49,9 @@ test("should deliver validated inbound events to typed client listeners", () => 
     name: "message-created",
     payload: {
       text: "  hello  "
+    },
+    route: {
+      target: "direct"
     }
   });
 
@@ -57,6 +61,9 @@ test("should deliver validated inbound events to typed client listeners", () => 
     name: "message-created",
     payload: {
       text: "ignored"
+    },
+    route: {
+      target: "direct"
     }
   });
 
@@ -102,6 +109,9 @@ test("should normalize invalid inbound event payloads before user listeners", ()
     name: "message-created",
     payload: {
       text: 42
+    },
+    route: {
+      target: "direct"
     }
   });
 
@@ -111,5 +121,96 @@ test("should normalize invalid inbound event payloads before user listeners", ()
   assert.equal(
     (capturedErrors[0] as { code: string }).code,
     "invalid-event-payload"
+  );
+});
+
+/**
+ * Проверяет, что client runtime больше не доверяет channel-scoped inbound
+ * delivery только по имени события и дополнительно сверяет channel instance
+ * с локальным subscription state.
+ * Это важно, потому что после unsubscribe или state divergence transport не
+ * должен иметь возможности протолкнуть channel event в пользовательский
+ * listener, если активной подписки на этот channel instance уже нет.
+ * Также покрывается corner case с нормализованным runtime error, чтобы такой
+ * stray delivery не терялся молча и оставался наблюдаемым через error hook.
+ */
+test("should ignore inbound channel events that do not match an active subscription", async () => {
+  let receiver: ClientTransportEventReceiver | undefined;
+  const capturedErrors: unknown[] = [];
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string().min(1)
+    })
+  });
+  const runtime = createClientRuntime({
+    registry: createContractRegistry({
+      channels: [voiceRoom] as const,
+      events: [messageCreated] as const
+    }),
+    onError(error) {
+      capturedErrors.push(error);
+    },
+    transport: {
+      subscribeChannel() {
+        return undefined;
+      },
+      unsubscribeChannel() {
+        return undefined;
+      },
+      bindEvents(nextReceiver) {
+        receiver = nextReceiver;
+      }
+    }
+  });
+  const receivedPayloads: string[] = [];
+  const channelId = voiceRoom.of({
+    roomId: "room-1"
+  }).id;
+
+  runtime.onEvent("message-created", (payload) => {
+    receivedPayloads.push(payload.text);
+  });
+
+  await runtime.subscribeChannel("voice-room", {
+    roomId: "room-1"
+  });
+
+  receiver?.({
+    name: "message-created",
+    payload: {
+      text: "allowed"
+    },
+    route: {
+      target: "channel",
+      channelId
+    }
+  });
+
+  await runtime.unsubscribeChannel("voice-room", {
+    roomId: "room-1"
+  });
+
+  receiver?.({
+    name: "message-created",
+    payload: {
+      text: "blocked"
+    },
+    route: {
+      target: "channel",
+      channelId
+    }
+  });
+
+  assert.deepEqual(receivedPayloads, ["allowed"]);
+  assert.equal(capturedErrors.length, 1);
+  assert.ok(isRealtimeError(capturedErrors[0]));
+  assert.equal(
+    (capturedErrors[0] as { code: string }).code,
+    "internal-error"
   );
 });

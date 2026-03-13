@@ -5,6 +5,7 @@ import {
   event,
   receivePolicy,
   type EventPayload,
+  type RealtimeErrorPayload,
   type ReceivePolicyContract
 } from "@liverail/contracts";
 import {
@@ -106,6 +107,42 @@ type ShouldReturnTypedDeliveriesAfterReceivePolicies = Assert<
     >
   >
 >;
+
+const pendingReport = runtime.emitEventReport(
+  "message-created",
+  {
+    text: "hello"
+  },
+  {
+    context: {
+      role: "member"
+    }
+  }
+);
+
+pendingReport.then((report) => {
+  type ShouldTypeDeliveredReportEntries = Assert<
+    IsEqual<
+      typeof report.delivered,
+      readonly {
+        readonly contract: typeof messageCreated;
+        readonly name: "message-created";
+        readonly payload: EventPayload<typeof messageCreated>;
+        readonly route: ServerEventRoute;
+        readonly context: { role: "member" | "guest" };
+      }[]
+    >
+  >;
+
+  type ShouldTypeDeniedReportErrors = Assert<
+    IsEqual<
+      typeof report.denied[number]["error"],
+      RealtimeErrorPayload
+    >
+  >;
+
+  void report.denied[0]?.route.target;
+});
 
 runtime.emitEvent("message-created", {
   text: "hello"

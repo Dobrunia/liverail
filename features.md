@@ -503,7 +503,7 @@
        **Не забыть обновить:** typed channel subscription API, typed event listener API, channel membership runtime, client connection lifecycle model, server lifecycle hooks.  
        **Почему здесь:** это закрывает важный operational-gap между подпиской, reconnect и lifecycle-моделью.
 
-       ### 10B.8 Package boundary and tree-shaking safety
+### 10B.8 Package boundary and tree-shaking safety
 
 - [x] **Package boundary and tree-shaking safety**  
        **Описание:** проверка и настройка структуры пакетов так, чтобы каждый пакет тянул только действительно нужный код и зависимости.  
