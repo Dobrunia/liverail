@@ -45,8 +45,11 @@ test("should execute typed commands through the client transport", async () => {
         receivedRequest = request;
 
         return {
-          acceptedAt: "2026-03-13T12:00:00.000Z",
-          appliedLevel: "42"
+          status: "ack" as const,
+          ack: {
+            acceptedAt: "2026-03-13T12:00:00.000Z",
+            appliedLevel: "42"
+          }
         };
       }
     }
@@ -93,7 +96,10 @@ test("should stop command execution on invalid input before the transport call",
     transport: {
       async sendCommand() {
         transportCalled = true;
-        return undefined;
+        return {
+          status: "ack" as const,
+          ack: undefined
+        };
       }
     }
   });
@@ -146,7 +152,10 @@ test("should normalize transport failures and invalid command ack payloads", asy
         }
 
         return {
-          appliedLevel: 200
+          status: "ack" as const,
+          ack: {
+            appliedLevel: 200
+          }
         };
       }
     }
@@ -177,6 +186,125 @@ test("should normalize transport failures and invalid command ack payloads", asy
 
       assert.equal(error.code, "invalid-ack");
       assert.equal(error.details?.source, "zod");
+      return true;
+    }
+  );
+});
+
+/**
+ * Проверяет, что command failure и timeout могут быть выражены явным transport
+ * result status, а client runtime нормализует их в официальный error model.
+ * Это важно, потому что для реального transport слоя недостаточно различать
+ * только `ack` и `missing-ack`: нужны еще предсказуемые failure и timeout ветки.
+ * Также покрываются corner cases с explicit realtime error и timeout override,
+ * чтобы per-call надежность не зависела от неявного поведения transport adapter.
+ */
+test("should normalize explicit command failure and timeout results", async () => {
+  const crash = command("crash", {
+    input: z.void(),
+    ack: z.void()
+  });
+  const slow = command("slow", {
+    input: z.void(),
+    ack: z.void()
+  });
+  const runtime = createClientRuntime({
+    registry: createContractRegistry({
+      commands: [crash, slow] as const
+    }),
+    commandTimeoutMs: 5,
+    transport: {
+      sendCommand(request) {
+        if (request.name === "crash") {
+          return {
+            status: "error" as const,
+            error: new Error("Socket write failed.")
+          };
+        }
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              status: "ack" as const,
+              ack: undefined
+            });
+          }, 50);
+        });
+      }
+    }
+  });
+
+  await assert.rejects(
+    () => runtime.executeCommand("crash", undefined),
+    (error: unknown) => {
+      if (!isRealtimeError(error)) {
+        return false;
+      }
+
+      assert.equal(error.code, "command-failed");
+      assert.deepEqual(error.details, {
+        commandName: "crash",
+        stage: "transport"
+      });
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    () =>
+      runtime.executeCommand("slow", undefined, {
+        timeoutMs: 10
+      }),
+    (error: unknown) => {
+      if (!isRealtimeError(error)) {
+        return false;
+      }
+
+      assert.equal(error.code, "timeout");
+      assert.deepEqual(error.details, {
+        commandName: "slow",
+        timeoutMs: 10
+      });
+      return true;
+    }
+  );
+});
+
+/**
+ * Проверяет, что transport-level отсутствие ack не смешивается с `invalid-ack`
+ * и нормализуется в отдельный официальный realtime error `missing-ack`.
+ * Это важно, потому что для reliability-слоя нужно различать "ack пришел,
+ * но сломан" и "ack вообще не пришел", иначе поведение команды слишком неявно.
+ * Также покрывается corner case с `z.void()`-ack, чтобы отсутствие значения
+ * отличалось от явного `{ status: "ack", ack: undefined }`.
+ */
+test("should reject command executions with a missing transport ack", async () => {
+  const ping = command("ping", {
+    input: z.void(),
+    ack: z.void()
+  });
+  const runtime = createClientRuntime({
+    registry: createContractRegistry({
+      commands: [ping] as const
+    }),
+    transport: {
+      async sendCommand() {
+        return {
+          status: "missing-ack" as const
+        };
+      }
+    }
+  });
+
+  await assert.rejects(
+    () => runtime.executeCommand("ping", undefined),
+    (error: unknown) => {
+      if (!isRealtimeError(error)) {
+        return false;
+      }
+
+      assert.equal(error.code, "missing-ack");
+      assert.equal(error.message, 'Command ack is missing: "ping".');
       return true;
     }
   );

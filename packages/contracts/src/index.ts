@@ -36,12 +36,26 @@ export type {
   ContractPrimitiveOptions
 } from "./shared/primitives.ts";
 
-export { command, parseCommandAck, parseCommandInput } from "./command/index.ts";
+export {
+  COMMAND_ACK_STATUSES,
+  COMMAND_RESULT_STATUSES,
+  command,
+  parseCommandAck,
+  parseCommandInput
+} from "./command/index.ts";
 export type {
+  CommandAckResult,
+  CommandAckStatus,
+  CommandAckSuccess,
   CommandAck,
   CommandContext,
   CommandContract,
+  CommandErrorResult,
   CommandInput,
+  CommandResult,
+  CommandResultStatus,
+  CommandTimeoutResult,
+  MissingCommandAck,
   CommandOptions
 } from "./command/index.ts";
 

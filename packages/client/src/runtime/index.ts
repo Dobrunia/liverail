@@ -3,6 +3,7 @@ import type {
   ChannelContract,
   CommandAck,
   CommandContract,
+  CommandResult,
   ContractRegistry,
   EventContract,
   ResolveSchemaInput
@@ -28,6 +29,8 @@ import {
 } from "../subscriptions/index.ts";
 import type {
   ClientTransport,
+  ClientTransportConnectionEvent,
+  ClientTransportConnectionReceiver,
   ClientTransportChannelRequest,
   ClientTransportCommandRequest,
   ClientTransportEvent,
@@ -61,6 +64,11 @@ export interface CreateClientRuntimeOptions<
    * Необязательный hook для нормализованных client runtime ошибок.
    */
   readonly onError?: ClientRuntimeErrorHandler;
+
+  /**
+   * Необязательный дефолтный timeout ожидания результата команды в миллисекундах.
+   */
+  readonly commandTimeoutMs?: number;
 }
 
 /**
@@ -103,7 +111,8 @@ export interface ClientRuntime<
    */
   executeCommand<TName extends CommandName<TRegistry>>(
     name: TName,
-    input: ResolveSchemaInput<TRegistry["commands"]["byName"][TName]["input"]>
+    input: ResolveSchemaInput<TRegistry["commands"]["byName"][TName]["input"]>,
+    options?: ExecuteClientCommandOptions
   ): Promise<CommandAck<TRegistry["commands"]["byName"][TName]>>;
 
   /**
@@ -137,6 +146,16 @@ export interface ClientRuntime<
 }
 
 /**
+ * Параметры выполнения typed команды в client runtime.
+ */
+export interface ExecuteClientCommandOptions {
+  /**
+   * Необязательный timeout ожидания transport result в миллисекундах.
+   */
+  readonly timeoutMs?: number;
+}
+
+/**
  * Создает базовый client runtime вокруг explicit contract registry.
  */
 export function createClientRuntime<
@@ -151,6 +170,7 @@ export function createClientRuntime<
   const { registry } = options;
   const transport = options.transport;
   const onError = options.onError;
+  const defaultCommandTimeoutMs = options.commandTimeoutMs;
   const channelSubscriptions = new Map<
     string,
     ClientChannelSubscription<ChannelContract>
@@ -163,6 +183,14 @@ export function createClientRuntime<
     registry,
     eventListeners,
     onError
+  );
+  const transportConnectionReceiver = createTransportConnectionReceiver(
+    channelSubscriptions,
+    transport,
+    onError
+  );
+  const unbindTransportConnection = transport?.bindConnection?.(
+    transportConnectionReceiver
   );
   const unbindTransportEvents = transport?.bindEvents?.(transportEventReceiver);
   let isDestroyed = false;
@@ -184,7 +212,11 @@ export function createClientRuntime<
         name as keyof typeof registry.channels.byName
       ] as ChannelContract | undefined;
     },
-    async executeCommand(name: string, input: unknown) {
+    async executeCommand(
+      name: string,
+      input: unknown,
+      executionOptions: ExecuteClientCommandOptions = {}
+    ) {
       const contract = registry.commands.byName[
         name as keyof typeof registry.commands.byName
       ] as CommandContract | undefined;
@@ -202,11 +234,49 @@ export function createClientRuntime<
         name: contract.name,
         input: parsedInput
       } satisfies ClientTransportCommandRequest;
+      const timeoutMs =
+        executionOptions.timeoutMs ?? defaultCommandTimeoutMs;
 
       try {
-        const rawAck = await transport.sendCommand(request);
+        const result = await resolveClientCommandResult(
+          transport.sendCommand,
+          request,
+          name,
+          timeoutMs
+        );
 
-        return parseCommandAck(contract, rawAck);
+        if (result.status === "missing-ack") {
+          throw createRealtimeError({
+            code: "missing-ack",
+            message: `Command ack is missing: "${name}".`
+          });
+        }
+
+        if (result.status === "timeout") {
+          throw createRealtimeError({
+            code: "timeout",
+            message: `Command timed out: "${name}".`,
+            details:
+              timeoutMs === undefined
+                ? {
+                    commandName: name
+                  }
+                : {
+                    commandName: name,
+                    timeoutMs
+                  }
+          });
+        }
+
+        if (result.status === "error") {
+          if (isRealtimeError(result.error)) {
+            throw result.error;
+          }
+
+          throw normalizeClientCommandTransportError(result.error, name);
+        }
+
+        return parseCommandAck(contract, result.ack);
       } catch (error) {
         if (isRealtimeError(error)) {
           throw error;
@@ -340,10 +410,65 @@ export function createClientRuntime<
       isDestroyed = true;
       eventListeners.clear();
       channelSubscriptions.clear();
+      unbindTransportConnection?.();
       unbindTransportEvents?.();
       transport?.dispose?.();
     }
   }) as ClientRuntime<TRegistry>;
+}
+
+/**
+ * Создает receiver lifecycle-событий transport соединения и безопасно
+ * восстанавливает активные подписки после reconnect.
+ */
+function createTransportConnectionReceiver(
+  channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
+  transport: ClientTransport | undefined,
+  onError: ClientRuntimeErrorHandler | undefined
+): ClientTransportConnectionReceiver {
+  let shouldResubscribe = false;
+
+  return (event: ClientTransportConnectionEvent) => {
+    if (event.status === "disconnected") {
+      shouldResubscribe = true;
+      return;
+    }
+
+    if (!shouldResubscribe) {
+      return;
+    }
+
+    shouldResubscribe = false;
+
+    if (transport?.subscribeChannel === undefined) {
+      return;
+    }
+
+    for (const subscription of [...channelSubscriptions.values()]) {
+      const request = {
+        name: subscription.name,
+        key: subscription.key
+      } satisfies ClientTransportChannelRequest;
+
+      void Promise.resolve(transport.subscribeChannel(request)).catch(
+        (error: unknown) => {
+        if (isRealtimeError(error)) {
+          reportClientRuntimeError(error, onError);
+          return;
+        }
+
+        reportClientRuntimeError(
+          normalizeClientChannelTransportError(
+            error,
+            subscription.name,
+            "resubscribe"
+          ),
+          onError
+        );
+        }
+      );
+    }
+  };
 }
 
 /**
@@ -391,6 +516,50 @@ function createTransportEventReceiver(
 }
 
 /**
+ * Разрешает transport result команды и при необходимости накладывает timeout.
+ */
+function resolveClientCommandResult(
+  sendCommand: NonNullable<ClientTransport["sendCommand"]>,
+  request: ClientTransportCommandRequest,
+  commandName: string,
+  timeoutMs: number | undefined
+): Promise<CommandResult> {
+  const pendingResult = Promise.resolve(sendCommand(request));
+
+  if (timeoutMs === undefined) {
+    return pendingResult;
+  }
+
+  assertClientCommandTimeout(timeoutMs);
+
+  return new Promise<CommandResult>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(
+        createRealtimeError({
+          code: "timeout",
+          message: `Command timed out: "${commandName}".`,
+          details: {
+            commandName,
+            timeoutMs
+          }
+        })
+      );
+    }, timeoutMs);
+
+    pendingResult.then(
+      (result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+}
+
+/**
  * Нормализует transport-ошибку client command flow в единый realtime error shape.
  */
 function normalizeClientCommandTransportError(
@@ -409,12 +578,21 @@ function normalizeClientCommandTransportError(
 }
 
 /**
+ * Проверяет корректность timeout-параметра command execution.
+ */
+function assertClientCommandTimeout(timeoutMs: number): void {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("Client command timeout must be a positive finite number.");
+  }
+}
+
+/**
  * Нормализует transport-ошибку channel subscription flow в общий realtime error.
  */
 function normalizeClientChannelTransportError(
   error: unknown,
   channelName: string,
-  stage: "subscribe" | "unsubscribe"
+  stage: "subscribe" | "unsubscribe" | "resubscribe"
 ) {
   return createRealtimeError({
     code: "internal-error",

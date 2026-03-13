@@ -8,6 +8,7 @@ import { cloneDeep, deepFreeze, isObjectLike } from "../shared/object.ts";
 export const REALTIME_ERROR_CODES = Object.freeze([
   "invalid-input",
   "invalid-ack",
+  "missing-ack",
   "invalid-event-payload",
   "invalid-channel-key",
   "unauthorized",

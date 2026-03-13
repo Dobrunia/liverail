@@ -267,7 +267,7 @@
 ## 7. Delivery & Reliability
 
 ### 7.1 Ack handling
-- [ ] **Ack handling model**
+- [x] **Ack handling model**
   **Описание:** единая модель подтверждений команд.
   **Что делает:** делает выполнение команды наблюдаемым и надежным.
   **Зачем нужна:** иначе realtime-команды слишком неявны.
@@ -277,7 +277,7 @@
   **Почему здесь:** после базового client/server command flow нужно стабилизировать подтверждения.
 
 ### 7.2 Timeout and failure model
-- [ ] **Timeout and failure model for commands**
+- [x] **Timeout and failure model for commands**
   **Описание:** единая модель timeout и ошибок выполнения команд.
   **Что делает:** задает предсказуемое поведение при неуспешном realtime-вызове.
   **Зачем нужна:** это критично для реального использования.
@@ -287,7 +287,7 @@
   **Почему здесь:** это следующий логический шаг после ack.
 
 ### 7.3 Reconnect-safe resubscription
-- [ ] **Reconnect-safe resubscription**
+- [x] **Reconnect-safe resubscription**
   **Описание:** автоматическое восстановление подписок после reconnect.
   **Что делает:** сохраняет согласованность клиента при нестабильной сети.
   **Зачем нужна:** без этого realtime UX быстро ломается.

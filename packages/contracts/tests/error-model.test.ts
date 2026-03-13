@@ -19,6 +19,7 @@ test("should expose the official realtime error code list", () => {
   assert.deepEqual(REALTIME_ERROR_CODES, [
     "invalid-input",
     "invalid-ack",
+    "missing-ack",
     "invalid-event-payload",
     "invalid-channel-key",
     "unauthorized",
@@ -110,8 +111,8 @@ test("should reject unsupported realtime error codes at runtime", () => {
  */
 test("should detect realtime errors without accepting arbitrary error-like values", () => {
   const realtimeError = createRealtimeError({
-    code: "timeout",
-    message: "Command timed out."
+    code: "missing-ack",
+    message: "Command acknowledgement is missing."
   });
 
   assert.equal(isRealtimeError(realtimeError), true);
@@ -119,8 +120,8 @@ test("should detect realtime errors without accepting arbitrary error-like value
   assert.equal(
     isRealtimeError({
       name: "LiveRailRealtimeError",
-      code: "timeout",
-      message: "Command timed out."
+      code: "missing-ack",
+      message: "Command acknowledgement is missing."
     }),
     false
   );

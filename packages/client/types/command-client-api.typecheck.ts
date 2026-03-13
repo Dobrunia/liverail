@@ -4,6 +4,8 @@ import {
   command,
   createContractRegistry,
   type CommandAck,
+  type CommandAckResult,
+  type CommandResult,
   type CommandInput
 } from "@liverail/contracts";
 import { createClientRuntime } from "../src/index.js";
@@ -29,6 +31,7 @@ const runtime = createClientRuntime({
   registry: createContractRegistry({
     commands: [setVolume] as const
   }),
+  commandTimeoutMs: 2500,
   transport: {
     sendCommand(request) {
       type ShouldTypeTransportCommandRequest = Assert<
@@ -42,7 +45,10 @@ const runtime = createClientRuntime({
       >;
 
       return {
-        appliedLevel: 42
+        status: "ack" as const,
+        ack: {
+          appliedLevel: 42
+        }
       };
     }
   }
@@ -57,8 +63,52 @@ type ShouldReturnTypedAckPromise = Assert<
   IsEqual<typeof pendingAck, Promise<CommandAck<typeof setVolume>>>
 >;
 
+type ShouldExposeSharedAckResultModel = Assert<
+  IsEqual<
+    CommandAckResult<{ appliedLevel: number }>,
+    | {
+        readonly status: "ack";
+        readonly ack: { appliedLevel: number };
+      }
+    | {
+        readonly status: "missing-ack";
+      }
+  >
+>;
+
+type ShouldExposeSharedCommandResultModel = Assert<
+  IsEqual<
+    CommandResult<{ appliedLevel: number }>,
+    | {
+        readonly status: "ack";
+        readonly ack: { appliedLevel: number };
+      }
+    | {
+        readonly status: "missing-ack";
+      }
+    | {
+        readonly status: "error";
+        readonly error: unknown;
+      }
+    | {
+        readonly status: "timeout";
+      }
+  >
+>;
+
 type ShouldKeepTypedCommandInput = Assert<
   IsEqual<CommandInput<typeof setVolume>, { roomId: string; level: number }>
+>;
+
+const pendingAckWithTimeout = runtime.executeCommand("set-volume", {
+  roomId: "room-1",
+  level: 42
+}, {
+  timeoutMs: 500
+});
+
+type ShouldAcceptTypedCommandExecutionOptions = Assert<
+  IsEqual<typeof pendingAckWithTimeout, Promise<CommandAck<typeof setVolume>>>
 >;
 
 runtime.executeCommand("set-volume", {

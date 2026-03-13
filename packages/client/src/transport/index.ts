@@ -1,3 +1,5 @@
+import type { CommandResult } from "@liverail/contracts";
+
 /**
  * Сырой outbound command request, который client runtime отправляет в transport.
  */
@@ -18,7 +20,7 @@ export interface ClientTransportCommandRequest {
  */
 export type ClientTransportCommandSender = (
   request: ClientTransportCommandRequest
-) => unknown | Promise<unknown>;
+) => CommandResult | Promise<CommandResult>;
 
 /**
  * Сырой outbound channel subscription request.
@@ -48,6 +50,28 @@ export type ClientTransportChannelSubscriber = (
 export type ClientTransportChannelUnsubscriber = (
   request: ClientTransportChannelRequest
 ) => unknown | Promise<unknown>;
+
+/**
+ * Официальные статусы transport connection lifecycle для client runtime.
+ */
+export type ClientTransportConnectionStatus = "connected" | "disconnected";
+
+/**
+ * Transport-agnostic lifecycle event текущей client session.
+ */
+export interface ClientTransportConnectionEvent {
+  /**
+   * Текущее состояние transport session.
+   */
+  readonly status: ClientTransportConnectionStatus;
+}
+
+/**
+ * Обработчик lifecycle-событий transport соединения.
+ */
+export type ClientTransportConnectionReceiver = (
+  event: ClientTransportConnectionEvent
+) => void;
 
 /**
  * Сырой inbound event, который transport передает в client runtime.
@@ -89,6 +113,13 @@ export interface ClientTransport {
    * Выполняет transport-отписку от конкретного channel instance.
    */
   readonly unsubscribeChannel?: ClientTransportChannelUnsubscriber;
+
+  /**
+   * Регистрирует receiver lifecycle-событий transport соединения.
+   */
+  readonly bindConnection?: (
+    receiver: ClientTransportConnectionReceiver
+  ) => void | (() => void);
 
   /**
    * Регистрирует receiver входящих transport events и может вернуть cleanup.

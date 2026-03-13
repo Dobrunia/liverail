@@ -17,12 +17,17 @@ type ShouldInferRealtimeErrorCodeFromOfficialList = Assert<
     RealtimeErrorCode,
     (typeof REALTIME_ERROR_CODES)[number]
   > &
-    IsEqual<typeof timeoutError.code, "timeout">
+    IsEqual<typeof timeoutError.code, "timeout"> &
+    IsEqual<typeof missingAckError.code, "missing-ack">
 >;
 
 const timeoutError = createRealtimeError({
   code: "timeout",
   message: "Command timed out."
+});
+const missingAckError = createRealtimeError({
+  code: "missing-ack",
+  message: "Command acknowledgement is missing."
 });
 
 // @ts-expect-error realtime error code must come from the official code list
