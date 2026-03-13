@@ -66,7 +66,7 @@ export function createPrimitive<
   options: ContractPrimitiveOptions,
   extensions: TExtensions = {} as TExtensions
 ): ContractPrimitive<TKind, TName> & Readonly<Partial<TExtensions>> {
-  assertPrimitiveName(name);
+  assertPrimitiveName(kind, name);
 
   const contract: Record<string, unknown> & {
     kind: TKind;
@@ -99,8 +99,10 @@ export function createPrimitive<
 /**
  * Валидирует имя контрактной сущности и отсекает пустые объявления.
  */
-function assertPrimitiveName(name: string): void {
+function assertPrimitiveName(kind: ContractPrimitiveKind, name: string): void {
   if (name.trim().length === 0) {
-    throw new TypeError("Contract primitive name must not be empty.");
+    throw new TypeError(
+      `${kind[0]!.toUpperCase()}${kind.slice(1)} contract name must not be empty.`
+    );
   }
 }

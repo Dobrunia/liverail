@@ -1,4 +1,7 @@
-export { createServerRuntime } from "./runtime/index.ts";
+export {
+  createServerRuntime,
+  defineServerRuntime
+} from "./runtime/index.ts";
 export { createServerRuntimeContext } from "./context/index.ts";
 export {
   SOCKET_IO_CHANNEL_JOIN_EVENT,
@@ -13,6 +16,7 @@ export {
 export type {
   ChannelMembership,
   CreateServerRuntimeOptions,
+  DefineServerRuntimeOptions,
   ExecuteServerConnectionOptions,
   ExecuteServerJoinOptions,
   ExecuteServerLeaveOptions,

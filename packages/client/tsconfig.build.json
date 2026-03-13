@@ -4,6 +4,7 @@
     "noEmit": false,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
+    "paths": {},
     "outDir": "./dist",
     "rootDir": "./src"
   },

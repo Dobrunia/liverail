@@ -3,7 +3,10 @@ import {
   type CommandResult,
   type RealtimeErrorPayload
 } from "@liverail/contracts";
-import type { Socket as SocketIoClientSocket } from "socket.io-client";
+import {
+  io as createSocketIoClient,
+  type Socket as SocketIoClientSocket
+} from "socket.io-client";
 
 import type {
   ClientTransport,
@@ -29,13 +32,27 @@ export const SOCKET_IO_CHANNEL_JOIN_EVENT = "liverail:channel:join";
 export const SOCKET_IO_CHANNEL_LEAVE_EVENT = "liverail:channel:leave";
 
 /**
- * Параметры создания Socket.IO client transport adapter.
+ * Общие Socket.IO client options для happy path, где transport сам создает socket.
  */
-export interface CreateSocketIoClientTransportOptions {
+export type SocketIoClientConnectionOptions = NonNullable<
+  Parameters<typeof createSocketIoClient>[1]
+>;
+
+interface CreateSocketIoClientTransportFromSocketOptions {
   /**
    * Реальный Socket.IO client socket.
    */
   readonly socket: SocketIoClientSocket;
+
+  /**
+   * `url` нельзя передавать одновременно с готовым socket.
+   */
+  readonly url?: never;
+
+  /**
+   * Настройки клиента доступны только в режиме создания socket по `url`.
+   */
+  readonly socketOptions?: never;
 
   /**
    * Необязательное имя command event вместо дефолтного.
@@ -57,6 +74,51 @@ export interface CreateSocketIoClientTransportOptions {
    */
   readonly disconnectOnDispose?: boolean;
 }
+
+interface CreateSocketIoClientTransportFromUrlOptions {
+  /**
+   * URL, по которому transport сам создаст внутренний Socket.IO client.
+   */
+  readonly url: string;
+
+  /**
+   * Готовый socket нельзя передавать одновременно с `url`.
+   */
+  readonly socket?: never;
+
+  /**
+   * Необязательные настройки Socket.IO client для happy path.
+   */
+  readonly socketOptions?: SocketIoClientConnectionOptions;
+
+  /**
+   * Необязательное имя command event вместо дефолтного.
+   */
+  readonly commandEvent?: string;
+
+  /**
+   * Необязательное имя join event вместо дефолтного.
+   */
+  readonly joinEvent?: string;
+
+  /**
+   * Необязательное имя leave event вместо дефолтного.
+   */
+  readonly leaveEvent?: string;
+
+  /**
+   * Нужно ли разрывать socket при `dispose`.
+   * Для internal socket по умолчанию включено.
+   */
+  readonly disconnectOnDispose?: boolean;
+}
+
+/**
+ * Параметры создания Socket.IO client transport adapter.
+ */
+export type CreateSocketIoClientTransportOptions =
+  | CreateSocketIoClientTransportFromSocketOptions
+  | CreateSocketIoClientTransportFromUrlOptions;
 
 /**
  * Реальный Socket.IO transport adapter для client runtime.
@@ -84,14 +146,18 @@ export interface SocketIoClientTransport extends ClientTransport {
 export function createSocketIoClientTransport(
   options: CreateSocketIoClientTransportOptions
 ): SocketIoClientTransport {
-  if (options?.socket === undefined) {
-    throw new TypeError("Socket.IO client transport requires a socket instance.");
+  if (options === undefined) {
+    throw new TypeError(
+      "Socket.IO client transport requires either a socket instance or a connection url."
+    );
   }
 
-  const { socket } = options;
+  const socket = resolveSocketIoClientSocket(options);
+  const ownsSocket = isSocketIoUrlTransportOptions(options);
   const commandEvent = options.commandEvent ?? SOCKET_IO_COMMAND_EVENT;
   const joinEvent = options.joinEvent ?? SOCKET_IO_CHANNEL_JOIN_EVENT;
   const leaveEvent = options.leaveEvent ?? SOCKET_IO_CHANNEL_LEAVE_EVENT;
+  const disconnectOnDispose = options.disconnectOnDispose ?? ownsSocket;
 
   return Object.freeze({
     commandEvent,
@@ -129,11 +195,31 @@ export function createSocketIoClientTransport(
       );
     },
     dispose() {
-      if (options.disconnectOnDispose === true) {
+      if (disconnectOnDispose) {
         socket.disconnect();
       }
     }
   });
+}
+
+/**
+ * Возвращает готовый Socket.IO client socket из явного socket или создает
+ * его по `url` для минимального happy path.
+ */
+function resolveSocketIoClientSocket(
+  options: CreateSocketIoClientTransportOptions
+): SocketIoClientSocket {
+  if (isSocketIoSocketTransportOptions(options)) {
+    return options.socket;
+  }
+
+  if (isSocketIoUrlTransportOptions(options)) {
+    return createSocketIoClient(options.url, options.socketOptions);
+  }
+
+  throw new TypeError(
+    "Socket.IO client transport requires either a socket instance or a connection url."
+  );
 }
 
 /**
@@ -372,5 +458,21 @@ function isRealtimeErrorPayload(value: unknown): value is RealtimeErrorPayload {
     (value as { name?: unknown }).name === "LiveRailRealtimeError" &&
     typeof (value as { code?: unknown }).code === "string" &&
     typeof (value as { message?: unknown }).message === "string"
+  );
+}
+
+function isSocketIoSocketTransportOptions(
+  options: CreateSocketIoClientTransportOptions
+): options is CreateSocketIoClientTransportFromSocketOptions {
+  return "socket" in options && options.socket !== undefined;
+}
+
+function isSocketIoUrlTransportOptions(
+  options: CreateSocketIoClientTransportOptions
+): options is CreateSocketIoClientTransportFromUrlOptions {
+  return (
+    "url" in options &&
+    typeof options.url === "string" &&
+    options.url.length > 0
   );
 }

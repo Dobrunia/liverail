@@ -104,6 +104,42 @@ export interface ContractRegistry<
 }
 
 /**
+ * Создает неизменяемый typed tuple command-контрактов без ручного `as const`.
+ */
+export function defineCommands<
+  const TCommands extends readonly CommandContract[]
+>(...commands: TCommands): TCommands {
+  return Object.freeze([...commands]) as TCommands;
+}
+
+/**
+ * Создает неизменяемый typed tuple event-контрактов без ручного `as const`.
+ */
+export function defineEvents<
+  const TEvents extends readonly EventContract[]
+>(...events: TEvents): TEvents {
+  return Object.freeze([...events]) as TEvents;
+}
+
+/**
+ * Создает неизменяемый typed tuple channel-контрактов без ручного `as const`.
+ */
+export function defineChannels<
+  const TChannels extends readonly ChannelContract[]
+>(...channels: TChannels): TChannels {
+  return Object.freeze([...channels]) as TChannels;
+}
+
+/**
+ * Создает неизменяемый typed tuple policy-контрактов без ручного `as const`.
+ */
+export function definePolicies<
+  const TPolicies extends readonly PolicyContract<string, any>[]
+>(...policies: TPolicies): TPolicies {
+  return Object.freeze([...policies]) as TPolicies;
+}
+
+/**
  * Создает явную registry-модель контрактов без скрытого глобального состояния.
  */
 export function createContractRegistry<

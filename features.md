@@ -391,7 +391,7 @@
 
 ### 10.1 Strongly typed public API
 
-- [ ] **Strongly typed public API**
+- [x] **Strongly typed public API**
       **Описание:** выравнивание и шлифовка публичного TypeScript API после стабилизации runtime.
       **Что делает:** улучшает inference и уменьшает потребность в ручных generic-аннотациях.
       **Зачем нужна:** библиотека должна быть не только правильной, но и удобной.
@@ -402,7 +402,7 @@
 
 ### 10.2 Minimal boilerplate defaults
 
-- [ ] **Minimal boilerplate defaults**
+- [x] **Minimal boilerplate defaults**
       **Описание:** хорошие defaults для самых частых сценариев.
       **Что делает:** делает правильный путь короче.
       **Зачем нужна:** если API будет слишком многословным, его начнут обходить.
@@ -413,7 +413,7 @@
 
 ### 10.3 Clear developer diagnostics and misuse warnings
 
-- [ ] **Clear developer diagnostics and misuse warnings**
+- [x] **Clear developer diagnostics and misuse warnings**
       **Описание:** понятные ошибки и предупреждения для неправильного использования библиотеки.
       **Что делает:** помогает быстрее ловить misuse contracts, subscriptions и runtime ошибок.
       **Зачем нужна:** это особенно полезно для LLM-driven разработки.

@@ -3,6 +3,12 @@
   "compilerOptions": {
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@liverail/contracts": [
+        "../contracts/src/index.ts"
+      ]
+    },
     "types": [
       "node"
     ]

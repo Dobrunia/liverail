@@ -20,7 +20,8 @@ import {
 import type { ClientEventListener } from "../events/index.ts";
 import {
   reportClientRuntimeError,
-  type ClientRuntimeErrorHandler
+  type ClientRuntimeErrorHandler,
+  warnClientRuntimeMisuse
 } from "../errors/index.ts";
 import type {
   ClientEventApplierDefinition,
@@ -253,12 +254,21 @@ export function createClientRuntime<
       input: unknown,
       executionOptions: ExecuteClientCommandOptions = {}
     ) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "execute commands"
+      );
+
       const contract = registry.commands.byName[
         name as keyof typeof registry.commands.byName
       ] as CommandContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown command contract: ${name}.`);
+        throw createUnknownClientContractError(
+          "command",
+          name,
+          Object.keys(registry.commands.byName)
+        );
       }
 
       if (transport?.sendCommand === undefined) {
@@ -322,12 +332,21 @@ export function createClientRuntime<
       }
     },
     async subscribeChannel(name: string, key: unknown) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "manage channel subscriptions"
+      );
+
       const contract = registry.channels.byName[
         name as keyof typeof registry.channels.byName
       ] as ChannelContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown channel contract: ${name}.`);
+        throw createUnknownClientContractError(
+          "channel",
+          name,
+          Object.keys(registry.channels.byName)
+        );
       }
 
       if (transport?.subscribeChannel === undefined) {
@@ -339,6 +358,9 @@ export function createClientRuntime<
       const existingSubscription = channelSubscriptions.get(subscriptionKey);
 
       if (existingSubscription !== undefined) {
+        warnClientRuntimeMisuse(
+          `Channel subscription is already active: "${name}" with key ${JSON.stringify(instance.key)}.`
+        );
         return existingSubscription as ClientChannelSubscription<ChannelContract>;
       }
 
@@ -368,12 +390,21 @@ export function createClientRuntime<
       return subscription;
     },
     async unsubscribeChannel(name: string, key: unknown) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "manage channel subscriptions"
+      );
+
       const contract = registry.channels.byName[
         name as keyof typeof registry.channels.byName
       ] as ChannelContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown channel contract: ${name}.`);
+        throw createUnknownClientContractError(
+          "channel",
+          name,
+          Object.keys(registry.channels.byName)
+        );
       }
 
       const instance = createChannelInstance(contract, key);
@@ -407,12 +438,21 @@ export function createClientRuntime<
       return true;
     },
     onEvent(name: string, listener: ClientEventListener<EventContract>) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "register event listeners"
+      );
+
       const contract = registry.events.byName[
         name as keyof typeof registry.events.byName
       ] as EventContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown event contract: ${name}.`);
+        throw createUnknownClientContractError(
+          "event",
+          name,
+          Object.keys(registry.events.byName)
+        );
       }
 
       let bucket = eventListeners.get(contract.name);
@@ -448,6 +488,11 @@ export function createClientRuntime<
       >,
       stateStore: ClientStateStore<TState>
     ) {
+      assertClientRuntimeIsActive(
+        isDestroyed,
+        "register event appliers"
+      );
+
       const contract = registry.events.byName[
         applier.event.name as keyof typeof registry.events.byName
       ] as TRegistry["events"]["byName"][TName] | undefined;
@@ -494,6 +539,9 @@ export function createClientRuntime<
     },
     destroy() {
       if (isDestroyed) {
+        warnClientRuntimeMisuse(
+          "Client runtime is already destroyed; repeated destroy() is ignored."
+        );
         return;
       }
 
@@ -732,4 +780,38 @@ function normalizeClientEventApplierError(
     },
     cause: error
   });
+}
+
+function assertClientRuntimeIsActive(
+  isDestroyed: boolean,
+  action: string
+): void {
+  if (isDestroyed) {
+    throw new TypeError(
+      `Client runtime is destroyed and cannot ${action}.`
+    );
+  }
+}
+
+function createUnknownClientContractError(
+  kind: "command" | "event" | "channel",
+  name: string,
+  registeredNames: readonly string[]
+): TypeError {
+  return new TypeError(
+    `Unknown ${kind} contract: "${name}". ${formatRegisteredContractNames(kind, registeredNames)}`
+  );
+}
+
+function formatRegisteredContractNames(
+  kind: "command" | "event" | "channel",
+  registeredNames: readonly string[]
+): string {
+  const label = `${kind}s`;
+
+  if (registeredNames.length === 0) {
+    return `Registered ${label}: none.`;
+  }
+
+  return `Registered ${label}: ${registeredNames.join(", ")}.`;
 }

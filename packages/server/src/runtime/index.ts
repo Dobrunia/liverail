@@ -35,6 +35,89 @@ type EventName<TRegistry extends ContractRegistry> =
 type ChannelName<TRegistry extends ContractRegistry> =
   keyof TRegistry["channels"]["byName"] & string;
 
+type IsAny<TValue> = 0 extends 1 & TValue ? true : false;
+
+type IsUnknown<TValue> = IsAny<TValue> extends true
+  ? false
+  : unknown extends TValue
+    ? ([TValue] extends [unknown] ? true : false)
+    : false;
+
+type KnownServerRuntimeContext<TValue> = IsAny<TValue> extends true
+  ? never
+  : IsUnknown<TValue> extends true
+    ? never
+    : TValue;
+
+type RequiresServerRuntimeContext<TValue> =
+  [KnownServerRuntimeContext<TValue>] extends [never]
+    ? false
+    : [TValue] extends [void | undefined]
+      ? false
+      : true;
+
+type UnionToIntersection<TValue> =
+  (TValue extends unknown ? (value: TValue) => void : never) extends (
+    value: infer TResult
+  ) => void
+    ? TResult
+    : never;
+
+type Simplify<TValue> = {
+  [TKey in keyof TValue]: TValue[TKey];
+} & {};
+
+/**
+ * Внутренний extractor контекста из публичных server runtime policy/handler API.
+ * Нужен только для authoring-time inference и не влияет на runtime-поведение.
+ */
+type ExtractServerRuntimeContext<TValue> =
+  TValue extends undefined
+    ? never
+    : TValue extends readonly (infer TItem)[]
+      ? ExtractServerRuntimeContext<TItem>
+      : TValue extends ConnectPolicyContract<string, infer TContext, any>
+        ? KnownServerRuntimeContext<TContext>
+        : TValue extends CommandPolicyContract<string, any, infer TContext>
+          ? KnownServerRuntimeContext<TContext>
+          : TValue extends JoinPolicyContract<string, any, infer TContext>
+            ? KnownServerRuntimeContext<TContext>
+            : TValue extends ReceivePolicyContract<string, any, infer TContext, any>
+              ? KnownServerRuntimeContext<TContext>
+              : TValue extends (execution: infer TExecution) => unknown
+                ? TExecution extends { readonly context: infer TContext }
+                  ? KnownServerRuntimeContext<TContext>
+                  : never
+                : TValue extends Record<string, infer TMember>
+                  ? ExtractServerRuntimeContext<TMember>
+                  : never;
+
+type NormalizeServerRuntimeContext<TContext> = [TContext] extends [never]
+  ? unknown
+  : Simplify<UnionToIntersection<TContext>>;
+
+type InferServerRuntimeContext<
+  TConnectionPolicies,
+  TCommandPolicies,
+  TCommandHandlers,
+  TCommandAuthorizers,
+  TEventRouters,
+  TEventReceivePolicies,
+  TEventDeliverers,
+  TChannelJoinPolicies,
+  TChannelJoinAuthorizers
+> = NormalizeServerRuntimeContext<
+  | ExtractServerRuntimeContext<TConnectionPolicies>
+  | ExtractServerRuntimeContext<TCommandPolicies>
+  | ExtractServerRuntimeContext<TCommandHandlers>
+  | ExtractServerRuntimeContext<TCommandAuthorizers>
+  | ExtractServerRuntimeContext<TEventRouters>
+  | ExtractServerRuntimeContext<TEventReceivePolicies>
+  | ExtractServerRuntimeContext<TEventDeliverers>
+  | ExtractServerRuntimeContext<TChannelJoinPolicies>
+  | ExtractServerRuntimeContext<TChannelJoinAuthorizers>
+>;
+
 /**
  * Параметры создания transport-agnostic server runtime.
  */
@@ -106,6 +189,63 @@ export interface CreateServerRuntimeOptions<
 }
 
 /**
+ * Параметры strongly typed server runtime helper с выводом context из публичных
+ * policy/handler сигнатур без обязательного явного generic на runtime factory.
+ */
+export type DefineServerRuntimeOptions<
+  TRegistry extends ContractRegistry,
+  TConnectionPolicies extends
+    | ServerConnectionPolicies<any>
+    | undefined = undefined,
+  TCommandPolicies extends
+    | ServerCommandPolicies<TRegistry, any>
+    | undefined = undefined,
+  TCommandHandlers extends
+    | ServerCommandHandlers<TRegistry, any>
+    | undefined = undefined,
+  TCommandAuthorizers extends
+    | ServerCommandAuthorizers<TRegistry, any>
+    | undefined = undefined,
+  TEventRouters extends
+    | ServerEventRouters<TRegistry, any>
+    | undefined = undefined,
+  TEventReceivePolicies extends
+    | ServerEventReceivePolicies<TRegistry, any>
+    | undefined = undefined,
+  TEventDeliverers extends
+    | ServerEventDeliverers<TRegistry, any>
+    | undefined = undefined,
+  TChannelJoinPolicies extends
+    | ServerChannelJoinPolicies<TRegistry, any>
+    | undefined = undefined,
+  TChannelJoinAuthorizers extends
+    | ServerChannelJoinAuthorizers<TRegistry, any>
+    | undefined = undefined,
+  TRuntimeContext = InferServerRuntimeContext<
+    TConnectionPolicies,
+    TCommandPolicies,
+    TCommandHandlers,
+    TCommandAuthorizers,
+    TEventRouters,
+    TEventReceivePolicies,
+    TEventDeliverers,
+    TChannelJoinPolicies,
+    TChannelJoinAuthorizers
+  >
+> = CreateServerRuntimeOptions<TRuntimeContext, TRegistry> & {
+  readonly registry: TRegistry;
+  readonly connectionPolicies?: TConnectionPolicies;
+  readonly commandPolicies?: TCommandPolicies;
+  readonly commandHandlers?: TCommandHandlers;
+  readonly commandAuthorizers?: TCommandAuthorizers;
+  readonly eventRouters?: TEventRouters;
+  readonly eventReceivePolicies?: TEventReceivePolicies;
+  readonly eventDeliverers?: TEventDeliverers;
+  readonly channelJoinPolicies?: TChannelJoinPolicies;
+  readonly channelJoinAuthorizers?: TChannelJoinAuthorizers;
+};
+
+/**
  * Базовый server runtime, который знает только про registry и typed lookup
  * contracts, не привязываясь к конкретному транспорту.
  */
@@ -122,7 +262,7 @@ export interface ServerRuntime<
    * Централизованно авторизует новое подключение через connect policy layer.
    */
   authorizeConnection(
-    options: ExecuteServerConnectionOptions<TRuntimeContext>
+    ...args: ServerConnectionArguments<TRuntimeContext>
   ): Promise<void>;
 
   /**
@@ -163,7 +303,7 @@ export interface ServerRuntime<
   executeCommand<TName extends CommandName<TRegistry>>(
     name: TName,
     input: ResolveSchemaInput<TRegistry["commands"]["byName"][TName]["input"]>,
-    options: ExecuteServerCommandOptions<TRuntimeContext>
+    ...args: ServerCommandArguments<TRuntimeContext>
   ): Promise<CommandAck<TRegistry["commands"]["byName"][TName]>>;
 
   /**
@@ -172,7 +312,7 @@ export interface ServerRuntime<
   emitEvent<TName extends EventName<TRegistry>>(
     name: TName,
     payload: ResolveSchemaInput<TRegistry["events"]["byName"][TName]["payload"]>,
-    options: ExecuteServerEventOptions<TRuntimeContext>
+    ...args: ServerEventArguments<TRuntimeContext>
   ): Promise<
     readonly ServerEventDelivery<
       TRegistry["events"]["byName"][TName],
@@ -306,25 +446,48 @@ export type ServerCommandAuthorizers<
 export type ServerConnectionPolicies<TRuntimeContext = unknown> =
   readonly ConnectPolicyContract<string, TRuntimeContext, any>[];
 
+type ServerRuntimeContextOption<TRuntimeContext> =
+  RequiresServerRuntimeContext<TRuntimeContext> extends true
+    ? {
+        /**
+         * Runtime-контекст текущей операции.
+         */
+        readonly context: TRuntimeContext;
+      }
+    : {
+        /**
+         * Runtime-контекст текущей операции.
+         * В no-context runtime может быть опущен полностью.
+         */
+        readonly context?: TRuntimeContext;
+      };
+
+type ServerConnectionArguments<TRuntimeContext> =
+  RequiresServerRuntimeContext<TRuntimeContext> extends true
+    ? [options: ExecuteServerConnectionOptions<TRuntimeContext>]
+    : [options?: ExecuteServerConnectionOptions<TRuntimeContext>];
+
+type ServerCommandArguments<TRuntimeContext> =
+  RequiresServerRuntimeContext<TRuntimeContext> extends true
+    ? [options: ExecuteServerCommandOptions<TRuntimeContext>]
+    : [options?: ExecuteServerCommandOptions<TRuntimeContext>];
+
+type ServerEventArguments<TRuntimeContext> =
+  RequiresServerRuntimeContext<TRuntimeContext> extends true
+    ? [options: ExecuteServerEventOptions<TRuntimeContext>]
+    : [options?: ExecuteServerEventOptions<TRuntimeContext>];
+
 /**
  * Параметры connection authorization в runtime.
  */
-export interface ExecuteServerConnectionOptions<TRuntimeContext = unknown> {
-  /**
-   * Runtime-контекст нового подключения.
-   */
-  readonly context: TRuntimeContext;
-}
+export type ExecuteServerConnectionOptions<TRuntimeContext = unknown> =
+  ServerRuntimeContextOption<TRuntimeContext>;
 
 /**
  * Параметры выполнения конкретного command pipeline.
  */
-export interface ExecuteServerCommandOptions<TRuntimeContext = unknown> {
-  /**
-   * Runtime-контекст текущего запроса, который передается в authorize и handler.
-   */
-  readonly context: TRuntimeContext;
-}
+export type ExecuteServerCommandOptions<TRuntimeContext = unknown> =
+  ServerRuntimeContextOption<TRuntimeContext>;
 
 /**
  * Нормализованная route-запись event emission pipeline.
@@ -446,12 +609,8 @@ export type ServerEventReceivePolicies<
 /**
  * Параметры выполнения конкретного event emission pipeline.
  */
-export interface ExecuteServerEventOptions<TRuntimeContext = unknown> {
-  /**
-   * Runtime-контекст текущего emit-вызова.
-   */
-  readonly context: TRuntimeContext;
-}
+export type ExecuteServerEventOptions<TRuntimeContext = unknown> =
+  ServerRuntimeContextOption<TRuntimeContext>;
 
 /**
  * Server-specific execution context для channel join pipeline.
@@ -534,17 +693,12 @@ export type ServerChannelJoinAuthorizers<
 /**
  * Параметры join-операции в channel membership runtime.
  */
-export interface ExecuteServerJoinOptions<TRuntimeContext = unknown> {
+export type ExecuteServerJoinOptions<TRuntimeContext = unknown> = {
   /**
    * Идентификатор участника, который входит в channel instance.
    */
   readonly memberId: string;
-
-  /**
-   * Runtime-контекст join-операции.
-   */
-  readonly context: TRuntimeContext;
-}
+} & ServerRuntimeContextOption<TRuntimeContext>;
 
 /**
  * Параметры leave-операции в channel membership runtime.
@@ -587,17 +741,17 @@ export function createServerRuntime<
   return Object.freeze({
     registry,
     async authorizeConnection(
-      executionOptions: ExecuteServerConnectionOptions<TRuntimeContext>
+      executionOptions?: ExecuteServerConnectionOptions<TRuntimeContext>
     ) {
-      if (executionOptions === undefined) {
-        throw new TypeError("Connection authorization requires runtime options.");
-      }
+      const normalizedOptions =
+        executionOptions ??
+        ({} as ExecuteServerConnectionOptions<TRuntimeContext>);
 
       for (const contract of connectionPolicies) {
         const policyError = await evaluatePolicyContract(
           contract,
           {
-            context: executionOptions.context
+            context: normalizedOptions.context as TRuntimeContext
           },
           {
             defaultCode: "connection-denied",
@@ -634,18 +788,22 @@ export function createServerRuntime<
     async executeCommand(
       name: string,
       input: unknown,
-      executionOptions: ExecuteServerCommandOptions<TRuntimeContext>
+      executionOptions?: ExecuteServerCommandOptions<TRuntimeContext>
     ) {
-      if (executionOptions === undefined) {
-        throw new TypeError("Command execution requires runtime options.");
-      }
+      const normalizedOptions =
+        executionOptions ??
+        ({} as ExecuteServerCommandOptions<TRuntimeContext>);
 
       const contract = registry.commands.byName[
         name as keyof typeof registry.commands.byName
       ] as CommandContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown command contract: ${name}.`);
+        throw createUnknownServerContractError(
+          "command",
+          name,
+          Object.keys(registry.commands.byName)
+        );
       }
 
       const handler = commandHandlers[
@@ -661,7 +819,7 @@ export function createServerRuntime<
         contract,
         name: contract.name,
         input: parsedInput,
-        context: executionOptions.context
+        context: normalizedOptions.context as TRuntimeContext
       } as ServerCommandExecution<CommandContract, TRuntimeContext>;
       const policies = commandPolicies[
         name as keyof typeof commandPolicies
@@ -726,18 +884,22 @@ export function createServerRuntime<
     async emitEvent(
       name: string,
       payload: unknown,
-      executionOptions: ExecuteServerEventOptions<TRuntimeContext>
+      executionOptions?: ExecuteServerEventOptions<TRuntimeContext>
     ) {
-      if (executionOptions === undefined) {
-        throw new TypeError("Event emission requires runtime options.");
-      }
+      const normalizedOptions =
+        executionOptions ??
+        ({} as ExecuteServerEventOptions<TRuntimeContext>);
 
       const contract = registry.events.byName[
         name as keyof typeof registry.events.byName
       ] as EventContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown event contract: ${name}.`);
+        throw createUnknownServerContractError(
+          "event",
+          name,
+          Object.keys(registry.events.byName)
+        );
       }
 
       const router = eventRouters[
@@ -771,7 +933,7 @@ export function createServerRuntime<
         contract,
         name: contract.name,
         payload: parsedPayload,
-        context: executionOptions.context
+        context: normalizedOptions.context as TRuntimeContext
       } as ServerEventEmission<EventContract, TRuntimeContext>;
 
       let routes:
@@ -842,7 +1004,11 @@ export function createServerRuntime<
       ] as ChannelContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown channel contract: ${name}.`);
+        throw createUnknownServerContractError(
+          "channel",
+          name,
+          Object.keys(registry.channels.byName)
+        );
       }
 
       const instance = createChannelInstance(contract, key);
@@ -933,7 +1099,11 @@ export function createServerRuntime<
       ] as ChannelContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown channel contract: ${name}.`);
+        throw createUnknownServerContractError(
+          "channel",
+          name,
+          Object.keys(registry.channels.byName)
+        );
       }
 
       const instance = createChannelInstance(contract, key);
@@ -961,7 +1131,11 @@ export function createServerRuntime<
       ] as ChannelContract | undefined;
 
       if (contract === undefined) {
-        throw new TypeError(`Unknown channel contract: ${name}.`);
+        throw createUnknownServerContractError(
+          "channel",
+          name,
+          Object.keys(registry.channels.byName)
+        );
       }
 
       const instance = createChannelInstance(contract, key);
@@ -982,6 +1156,68 @@ export function createServerRuntime<
       >[];
     }
   }) as ServerRuntime<TRuntimeContext, TRegistry>;
+}
+
+/**
+ * Создает server runtime с усиленным authoring-time inference публичного API.
+ * Runtime-поведение полностью делегируется обычному `createServerRuntime`.
+ */
+export function defineServerRuntime<
+  TRegistry extends ContractRegistry,
+  TConnectionPolicies extends
+    | ServerConnectionPolicies<any>
+    | undefined = undefined,
+  TCommandPolicies extends
+    | ServerCommandPolicies<TRegistry, any>
+    | undefined = undefined,
+  TCommandHandlers extends
+    | ServerCommandHandlers<TRegistry, any>
+    | undefined = undefined,
+  TCommandAuthorizers extends
+    | ServerCommandAuthorizers<TRegistry, any>
+    | undefined = undefined,
+  TEventRouters extends
+    | ServerEventRouters<TRegistry, any>
+    | undefined = undefined,
+  TEventReceivePolicies extends
+    | ServerEventReceivePolicies<TRegistry, any>
+    | undefined = undefined,
+  TEventDeliverers extends
+    | ServerEventDeliverers<TRegistry, any>
+    | undefined = undefined,
+  TChannelJoinPolicies extends
+    | ServerChannelJoinPolicies<TRegistry, any>
+    | undefined = undefined,
+  TChannelJoinAuthorizers extends
+    | ServerChannelJoinAuthorizers<TRegistry, any>
+    | undefined = undefined,
+  TRuntimeContext = InferServerRuntimeContext<
+    TConnectionPolicies,
+    TCommandPolicies,
+    TCommandHandlers,
+    TCommandAuthorizers,
+    TEventRouters,
+    TEventReceivePolicies,
+    TEventDeliverers,
+    TChannelJoinPolicies,
+    TChannelJoinAuthorizers
+  >
+>(
+  options: DefineServerRuntimeOptions<
+    TRegistry,
+    TConnectionPolicies,
+    TCommandPolicies,
+    TCommandHandlers,
+    TCommandAuthorizers,
+    TEventRouters,
+    TEventReceivePolicies,
+    TEventDeliverers,
+    TChannelJoinPolicies,
+    TChannelJoinAuthorizers,
+    TRuntimeContext
+  >
+): ServerRuntime<TRuntimeContext, TRegistry> {
+  return createServerRuntime<TRuntimeContext, TRegistry>(options);
 }
 
 function normalizeCommandPipelineError(
@@ -1150,4 +1386,27 @@ function isPolicyDenyDecision(
   result: PolicyResolution<RealtimeErrorCode>
 ): result is PolicyDenyDecision<RealtimeErrorCode> {
   return typeof result === "object" && result !== null && result.allowed === false;
+}
+
+function createUnknownServerContractError(
+  kind: "command" | "event" | "channel",
+  name: string,
+  registeredNames: readonly string[]
+): TypeError {
+  return new TypeError(
+    `Unknown ${kind} contract: "${name}". ${formatRegisteredServerContractNames(kind, registeredNames)}`
+  );
+}
+
+function formatRegisteredServerContractNames(
+  kind: "command" | "event" | "channel",
+  registeredNames: readonly string[]
+): string {
+  const label = `${kind}s`;
+
+  if (registeredNames.length === 0) {
+    return `Registered ${label}: none.`;
+  }
+
+  return `Registered ${label}: ${registeredNames.join(", ")}.`;
 }

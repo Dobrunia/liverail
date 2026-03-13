@@ -1,4 +1,4 @@
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import assert from "node:assert/strict";
 
 import { z } from "zod";
@@ -20,6 +20,7 @@ import { createClientRuntime } from "../src/index.ts";
  * transport binding и не оставлял висящие слушатели после завершения работы.
  */
 test("should create a transport-agnostic client runtime around an explicit registry", () => {
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const ping = command("ping", {
     input: z.void(),
     ack: z.void()
@@ -52,11 +53,15 @@ test("should create a transport-agnostic client runtime around an explicit regis
     }
   });
 
-  assert.equal(runtime.registry, registry);
-  runtime.destroy();
-  runtime.destroy();
+  try {
+    assert.equal(runtime.registry, registry);
+    runtime.destroy();
+    runtime.destroy();
 
-  assert.deepEqual(calls, ["bind", "unbind", "dispose"]);
+    assert.deepEqual(calls, ["bind", "unbind", "dispose"]);
+  } finally {
+    warnSpy.mockRestore();
+  }
 });
 
 /**

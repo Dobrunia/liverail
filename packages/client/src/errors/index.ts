@@ -14,3 +14,15 @@ export function reportClientRuntimeError(
 ): void {
   onError?.(error);
 }
+
+/**
+ * Публикует dev-only warning о неправильном использовании client runtime,
+ * не влияя на production flow.
+ */
+export function warnClientRuntimeMisuse(message: string): void {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  console.warn(`[LiveRail] ${message}`);
+}

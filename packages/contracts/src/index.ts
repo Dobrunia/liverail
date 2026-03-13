@@ -21,6 +21,7 @@ export type {
 } from "./errors/index.ts";
 
 export type { RuntimeContext } from "./shared/runtime.ts";
+export { voidSchema } from "./shared/schema.ts";
 export type {
   AnyContractSchema,
   ContractSchema,
@@ -121,7 +122,13 @@ export type {
   ReceivePolicyOptions
 } from "./policy/index.ts";
 
-export { createContractRegistry } from "./registry/index.ts";
+export {
+  createContractRegistry,
+  defineChannels,
+  defineCommands,
+  defineEvents,
+  definePolicies
+} from "./registry/index.ts";
 export type {
   AnyContract,
   ContractRegistry,

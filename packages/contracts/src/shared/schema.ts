@@ -1,7 +1,13 @@
-import type { input as ZodInput, output as ZodOutput, ZodType } from "zod";
+import {
+  z,
+  type input as ZodInput,
+  type output as ZodOutput,
+  type ZodType
+} from "zod";
 
 import type { RealtimeValidationErrorCode } from "../errors/index.ts";
 import { normalizeValidationError } from "../errors/index.ts";
+import { describeDiagnosticValue } from "./diagnostics.ts";
 import { isObjectLike } from "./object.ts";
 
 /**
@@ -48,6 +54,12 @@ export type ResolveSchemaOutput<TSchema> =
     : InferSchemaOutput<Exclude<TSchema, undefined>>;
 
 /**
+ * Официальная schema для самых частых no-payload сценариев без ручного
+ * импорта `z.void()` в пользовательском коде.
+ */
+export const voidSchema = z.void();
+
+/**
  * Проверяет, что переданная schema совместима с Zod runtime API.
  */
 export function assertContractSchema(
@@ -59,7 +71,9 @@ export function assertContractSchema(
   }
 
   if (!isContractSchema(schema)) {
-    throw new TypeError(`Contract ${schemaName} schema must be a Zod schema.`);
+    throw new TypeError(
+      `Contract ${schemaName} schema must be a Zod schema. Received: ${describeDiagnosticValue(schema)}.`
+    );
   }
 }
 
