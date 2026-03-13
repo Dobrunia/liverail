@@ -59,6 +59,9 @@ type EventName<TRegistry extends ContractRegistry> =
 type ChannelName<TRegistry extends ContractRegistry> =
   keyof TRegistry["channels"]["byName"] & string;
 
+const DEFAULT_CLIENT_COMMAND_TIMEOUT_MS = 15_000;
+const DEFAULT_CLIENT_CHANNEL_OPERATION_TIMEOUT_MS = 15_000;
+
 /**
  * Параметры создания transport-agnostic client runtime.
  */
@@ -83,7 +86,12 @@ export interface CreateClientRuntimeOptions<
   /**
    * Необязательный дефолтный timeout ожидания результата команды в миллисекундах.
    */
-  readonly commandTimeoutMs?: number;
+  readonly commandTimeoutMs?: number | false;
+
+  /**
+   * Необязательный дефолтный timeout channel subscribe/unsubscribe в миллисекундах.
+   */
+  readonly channelOperationTimeoutMs?: number | false;
 }
 
 /**
@@ -160,7 +168,8 @@ export interface ClientRuntime<
    */
   subscribeChannel<TName extends ChannelName<TRegistry>>(
     name: TName,
-    key: ResolveSchemaInput<TRegistry["channels"]["byName"][TName]["key"]>
+    key: ResolveSchemaInput<TRegistry["channels"]["byName"][TName]["key"]>,
+    options?: ExecuteClientChannelOperationOptions
   ): Promise<ClientChannelSubscription<TRegistry["channels"]["byName"][TName]>>;
 
   /**
@@ -168,7 +177,8 @@ export interface ClientRuntime<
    */
   unsubscribeChannel<TName extends ChannelName<TRegistry>>(
     name: TName,
-    key: ResolveSchemaInput<TRegistry["channels"]["byName"][TName]["key"]>
+    key: ResolveSchemaInput<TRegistry["channels"]["byName"][TName]["key"]>,
+    options?: ExecuteClientChannelOperationOptions
   ): Promise<boolean>;
 
   /**
@@ -325,7 +335,27 @@ export interface ExecuteClientCommandOptions {
   /**
    * Необязательный timeout ожидания transport result в миллисекундах.
    */
-  readonly timeoutMs?: number;
+  readonly timeoutMs?: number | false;
+
+  /**
+   * Необязательный AbortSignal для раннего завершения ожидания команды.
+   */
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Параметры subscribe/unsubscribe channel operations в client runtime.
+ */
+export interface ExecuteClientChannelOperationOptions {
+  /**
+   * Необязательный timeout ожидания transport result в миллисекундах.
+   */
+  readonly timeoutMs?: number | false;
+
+  /**
+   * Необязательный AbortSignal для раннего завершения channel operation.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -343,11 +373,21 @@ export function createClientRuntime<
   const { registry } = options;
   const transport = options.transport;
   const onError = options.onError;
-  const defaultCommandTimeoutMs = options.commandTimeoutMs;
+  const defaultCommandTimeoutMs = resolveClientTimeoutMs(
+    options.commandTimeoutMs,
+    DEFAULT_CLIENT_COMMAND_TIMEOUT_MS,
+    "Client default command timeout"
+  );
+  const defaultChannelOperationTimeoutMs = resolveClientTimeoutMs(
+    options.channelOperationTimeoutMs,
+    DEFAULT_CLIENT_CHANNEL_OPERATION_TIMEOUT_MS,
+    "Client default channel operation timeout"
+  );
   const channelSubscriptions = new Map<
     string,
     ClientChannelSubscription<ChannelContract>
   >();
+  const channelOperationChains = new Map<string, Promise<unknown>>();
   const eventAppliers = new Map<string, Set<RegisteredClientEventApplier>>();
   const eventListeners = new Map<
     string,
@@ -362,7 +402,7 @@ export function createClientRuntime<
     channelSubscriptions,
     eventAppliers,
     eventListeners,
-    onError
+    reportRuntimeError
   );
   const hasConnectionTransport = transport?.bindConnection !== undefined;
   const connectionStateListeners = new Set<ClientConnectionStateListener>();
@@ -373,11 +413,7 @@ export function createClientRuntime<
   );
   const transportConnectionReceiver = createTransportConnectionReceiver(
     channelSubscriptions,
-    transport,
-    onError,
-    (payload) => {
-      emitSystemEvent("join_failed", payload);
-    },
+    scheduleChannelResubscribe,
     (event) => {
       transitionClientConnectionState(event.status, event.error);
     }
@@ -389,6 +425,116 @@ export function createClientRuntime<
   const contractIntrospection = inspectContractRegistry(registry);
   const transportBound = transport !== undefined;
   let isDestroyed = false;
+
+  function reportRuntimeError(error: ReturnType<typeof createRealtimeError>): void {
+    reportClientRuntimeError(error, onError);
+  }
+
+  function emitJoinFailed(
+    channelName: string,
+    key: ChannelKey<ChannelContract>,
+    error: ReturnType<typeof createRealtimeError>
+  ): void {
+    emitSystemEvent("join_failed", {
+      channelName,
+      key,
+      error: error.toJSON()
+    });
+  }
+
+  function enqueueChannelOperation<T>(
+    subscriptionKey: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const previousOperation = channelOperationChains.get(subscriptionKey);
+    const scheduledOperation =
+      previousOperation === undefined
+        ? (async () => {
+            assertClientRuntimeIsActive(
+              isDestroyed,
+              "manage channel subscriptions"
+            );
+
+            return operation();
+          })()
+        : Promise.resolve(previousOperation)
+            .catch(() => undefined)
+            .then(async () => {
+              assertClientRuntimeIsActive(
+                isDestroyed,
+                "manage channel subscriptions"
+              );
+
+              return operation();
+            });
+
+    const trackedOperation = scheduledOperation.finally(() => {
+      if (channelOperationChains.get(subscriptionKey) === trackedOperation) {
+        channelOperationChains.delete(subscriptionKey);
+      }
+    });
+
+    channelOperationChains.set(subscriptionKey, trackedOperation);
+
+    return trackedOperation;
+  }
+
+  function scheduleChannelResubscribe(
+    subscription: ClientChannelSubscription<ChannelContract>
+  ): void {
+    if (transport?.subscribeChannel === undefined) {
+      return;
+    }
+
+    const subscriptionKey = getClientChannelSubscriptionKey(
+      subscription.name,
+      subscription.key
+    );
+
+    void enqueueChannelOperation(subscriptionKey, async () => {
+      const currentSubscription = channelSubscriptions.get(subscriptionKey);
+
+      if (currentSubscription === undefined || currentSubscription !== subscription) {
+        return;
+      }
+
+      const request = {
+        name: subscription.name,
+        key: subscription.key
+      } satisfies ClientTransportChannelRequest;
+
+      try {
+        await resolveClientTransportOperation(
+          () => transport.subscribeChannel!(request),
+          {
+            timeoutMs: defaultChannelOperationTimeoutMs,
+            signal: undefined,
+            createTimeoutError: () =>
+              createClientChannelOperationTimeoutError(
+                subscription.name,
+                "resubscribe",
+                defaultChannelOperationTimeoutMs
+              ),
+            createAbortError: () =>
+              createClientChannelOperationAbortError(
+                subscription.name,
+                "resubscribe"
+              )
+          }
+        );
+      } catch (error) {
+        const normalizedError = normalizeClientChannelOperationFailure(
+          error,
+          subscription.name,
+          "resubscribe"
+        );
+
+        channelSubscriptions.delete(subscriptionKey);
+        reportRuntimeError(normalizedError);
+        emitJoinFailed(subscription.name, subscription.key, normalizedError);
+      }
+    });
+  }
 
   return Object.freeze({
     registry,
@@ -488,15 +634,19 @@ export function createClientRuntime<
         name: contract.name,
         input: parsedInput
       } satisfies ClientTransportCommandRequest;
-      const timeoutMs =
-        executionOptions.timeoutMs ?? defaultCommandTimeoutMs;
+      const timeoutMs = resolveClientTimeoutMs(
+        executionOptions.timeoutMs,
+        defaultCommandTimeoutMs,
+        "Client command timeout"
+      );
 
       try {
         const result = await resolveClientCommandResult(
           transport.sendCommand,
           request,
           name,
-          timeoutMs
+          timeoutMs,
+          executionOptions.signal
         );
 
         if (result.status === "missing-ack") {
@@ -527,7 +677,7 @@ export function createClientRuntime<
             throw result.error;
           }
 
-          throw normalizeClientCommandTransportError(result.error, name);
+          throw normalizeClientCommandTransportFailure(result.error, name);
         }
 
         return parseCommandAck(contract, result.ack);
@@ -536,10 +686,14 @@ export function createClientRuntime<
           throw error;
         }
 
-        throw normalizeClientCommandTransportError(error, name);
+        throw normalizeClientCommandTransportFailure(error, name);
       }
     },
-    async subscribeChannel(name: string, key: unknown) {
+    async subscribeChannel(
+      name: string,
+      key: unknown,
+      operationOptions: ExecuteClientChannelOperationOptions = {}
+    ) {
       assertClientRuntimeIsActive(
         isDestroyed,
         "manage channel subscriptions"
@@ -563,48 +717,94 @@ export function createClientRuntime<
 
       const instance = createChannelInstance(contract, key);
       const subscriptionKey = getClientChannelSubscriptionKey(name, instance.key);
-      const existingSubscription = channelSubscriptions.get(subscriptionKey);
-
-      if (existingSubscription !== undefined) {
-        warnClientRuntimeMisuse(
-          `Channel subscription is already active: "${name}" with key ${JSON.stringify(instance.key)}.`
-        );
-        return existingSubscription as ClientChannelSubscription<ChannelContract>;
-      }
-
       const request = {
         name: contract.name,
         key: instance.key
       } satisfies ClientTransportChannelRequest;
 
-      try {
-        await transport.subscribeChannel(request);
-      } catch (error) {
-        const normalizedError = isRealtimeError(error)
-          ? error
-          : normalizeClientChannelTransportError(error, name, "subscribe");
+      return enqueueChannelOperation(subscriptionKey, async () => {
+        const existingSubscription = channelSubscriptions.get(subscriptionKey);
 
-        emitSystemEvent("join_failed", {
-          channelName: contract.name,
+        if (existingSubscription !== undefined) {
+          warnClientRuntimeMisuse(
+            `Channel subscription is already active: "${name}" with key ${JSON.stringify(instance.key)}.`
+          );
+          return existingSubscription as ClientChannelSubscription<ChannelContract>;
+        }
+
+        const timeoutMs = resolveClientTimeoutMs(
+          operationOptions.timeoutMs,
+          defaultChannelOperationTimeoutMs,
+          "Client channel operation timeout"
+        );
+
+        try {
+          await resolveClientTransportOperation(
+            () => transport.subscribeChannel!(request),
+            {
+              timeoutMs,
+              signal: operationOptions.signal,
+              createTimeoutError: () =>
+                createClientChannelOperationTimeoutError(
+                  contract.name,
+                  "subscribe",
+                  timeoutMs
+                ),
+              createAbortError: () =>
+                createClientChannelOperationAbortError(
+                  contract.name,
+                  "subscribe"
+                )
+            }
+          );
+        } catch (error) {
+          const normalizedError = normalizeClientChannelOperationFailure(
+            error,
+            name,
+            "subscribe"
+          );
+
+          emitJoinFailed(contract.name, instance.key, normalizedError);
+          throw normalizedError;
+        }
+
+        if (isDestroyed) {
+          if (transport.unsubscribeChannel !== undefined) {
+            void Promise.resolve(transport.unsubscribeChannel(request)).catch(
+              (error: unknown) => {
+                reportRuntimeError(
+                  normalizeClientChannelOperationFailure(
+                    error,
+                    name,
+                    "unsubscribe"
+                  )
+                );
+              }
+            );
+          }
+
+          throw new TypeError(
+            "Client runtime is destroyed and cannot manage channel subscriptions."
+          );
+        }
+
+        const subscription = Object.freeze({
+          contract,
+          name: contract.name,
           key: instance.key,
-          error: normalizedError.toJSON()
-        });
+          id: instance.id
+        }) as ClientChannelSubscription<ChannelContract>;
 
-        throw normalizedError;
-      }
+        channelSubscriptions.set(subscriptionKey, subscription);
 
-      const subscription = Object.freeze({
-        contract,
-        name: contract.name,
-        key: instance.key,
-        id: instance.id
-      }) as ClientChannelSubscription<ChannelContract>;
-
-      channelSubscriptions.set(subscriptionKey, subscription);
-
-      return subscription;
+        return subscription;
+      });
     },
-    async unsubscribeChannel(name: string, key: unknown) {
+    async unsubscribeChannel(
+      name: string,
+      key: unknown,
+      operationOptions: ExecuteClientChannelOperationOptions = {}
+    ) {
       assertClientRuntimeIsActive(
         isDestroyed,
         "manage channel subscriptions"
@@ -625,10 +825,6 @@ export function createClientRuntime<
       const instance = createChannelInstance(contract, key);
       const subscriptionKey = getClientChannelSubscriptionKey(name, instance.key);
 
-      if (!channelSubscriptions.has(subscriptionKey)) {
-        return false;
-      }
-
       if (transport?.unsubscribeChannel === undefined) {
         throw new TypeError("Client transport does not support channel unsubscription.");
       }
@@ -638,19 +834,48 @@ export function createClientRuntime<
         key: instance.key
       } satisfies ClientTransportChannelRequest;
 
-      try {
-        await transport.unsubscribeChannel(request);
-      } catch (error) {
-        if (isRealtimeError(error)) {
-          throw error;
+      return enqueueChannelOperation(subscriptionKey, async () => {
+        if (!channelSubscriptions.has(subscriptionKey)) {
+          return false;
         }
 
-        throw normalizeClientChannelTransportError(error, name, "unsubscribe");
-      }
+        const timeoutMs = resolveClientTimeoutMs(
+          operationOptions.timeoutMs,
+          defaultChannelOperationTimeoutMs,
+          "Client channel operation timeout"
+        );
 
-      channelSubscriptions.delete(subscriptionKey);
+        try {
+          await resolveClientTransportOperation(
+            () => transport.unsubscribeChannel!(request),
+            {
+              timeoutMs,
+              signal: operationOptions.signal,
+              createTimeoutError: () =>
+                createClientChannelOperationTimeoutError(
+                  contract.name,
+                  "unsubscribe",
+                  timeoutMs
+                ),
+              createAbortError: () =>
+                createClientChannelOperationAbortError(
+                  contract.name,
+                  "unsubscribe"
+                )
+            }
+          );
+        } catch (error) {
+          throw normalizeClientChannelOperationFailure(
+            error,
+            name,
+            "unsubscribe"
+          );
+        }
 
-      return true;
+        channelSubscriptions.delete(subscriptionKey);
+
+        return true;
+      });
     },
     onEvent(name: string, listener: ClientEventListener<EventContract>) {
       assertClientRuntimeIsActive(
@@ -806,13 +1031,13 @@ export function createClientRuntime<
             (error: unknown) => {
               const normalizedError = isRealtimeError(error)
                 ? error
-                : normalizeClientChannelTransportError(
+                : normalizeClientChannelOperationTransportError(
                     error,
                     subscription.name,
                     "unsubscribe"
                   );
 
-              reportClientRuntimeError(normalizedError, onError);
+              reportRuntimeError(normalizedError);
             }
           );
         }
@@ -825,6 +1050,7 @@ export function createClientRuntime<
       eventListeners.clear();
       systemEventListeners.clear();
       channelSubscriptions.clear();
+      channelOperationChains.clear();
       unbindTransportConnection?.();
       unbindTransportEvents?.();
       transport?.dispose?.();
@@ -850,10 +1076,7 @@ export function createClientRuntime<
     if (nextState === "failed" && error !== undefined) {
       const normalizedError = normalizeClientConnectionLifecycleError(error);
 
-      reportClientRuntimeError(
-        normalizedError,
-        onError
-      );
+      reportRuntimeError(normalizedError);
       emitSystemEvent("connection_failed", {
         state: "failed",
         previousState,
@@ -888,7 +1111,13 @@ export function createClientRuntime<
     }
 
     for (const listener of [...connectionStateListeners]) {
-      listener(connectionState);
+      try {
+        listener(connectionState);
+      } catch (error) {
+        reportRuntimeError(
+          normalizeClientConnectionListenerError(error, connectionState.state)
+        );
+      }
     }
   }
 
@@ -905,7 +1134,13 @@ export function createClientRuntime<
     const systemEvent = createSystemEvent(name, payload);
 
     for (const listener of [...bucket]) {
-      (listener as ClientSystemEventListener<TName>)(systemEvent);
+      try {
+        (listener as ClientSystemEventListener<TName>)(systemEvent);
+      } catch (error) {
+        reportRuntimeError(
+          normalizeClientSystemEventListenerError(error, name)
+        );
+      }
     }
   }
 }
@@ -918,9 +1153,9 @@ export function createClientRuntime<
  */
 function createTransportConnectionReceiver(
   channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
-  transport: ClientTransport | undefined,
-  onError: ClientRuntimeErrorHandler | undefined,
-  onResubscribeFailure: (payload: SystemEventPayload<"join_failed">) => void,
+  resubscribeChannel: (
+    subscription: ClientChannelSubscription<ChannelContract>
+  ) => void,
   onConnectionEvent: (event: ClientTransportConnectionEvent) => void
 ): ClientTransportConnectionReceiver {
   let shouldResubscribe = false;
@@ -948,35 +1183,8 @@ function createTransportConnectionReceiver(
 
     shouldResubscribe = false;
 
-    if (transport?.subscribeChannel === undefined) {
-      return;
-    }
-
     for (const subscription of [...channelSubscriptions.values()]) {
-      const request = {
-        name: subscription.name,
-        key: subscription.key
-      } satisfies ClientTransportChannelRequest;
-
-      void Promise.resolve(transport.subscribeChannel(request)).catch(
-        (error: unknown) => {
-          const normalizedError = isRealtimeError(error)
-            ? error
-            : normalizeClientChannelTransportError(
-                error,
-                subscription.name,
-                "resubscribe"
-              );
-
-          channelSubscriptions.delete(subscription.id);
-          reportClientRuntimeError(normalizedError, onError);
-          onResubscribeFailure({
-            channelName: subscription.name,
-            key: subscription.key,
-            error: normalizedError.toJSON()
-          });
-        }
-      );
+      resubscribeChannel(subscription);
     }
   };
 }
@@ -991,7 +1199,7 @@ function createTransportEventReceiver(
   channelSubscriptions: Map<string, ClientChannelSubscription<ChannelContract>>,
   eventAppliers: Map<string, Set<RegisteredClientEventApplier>>,
   eventListeners: Map<string, Set<ClientEventListener<EventContract>>>,
-  onError: ClientRuntimeErrorHandler | undefined
+  reportRuntimeError: (error: ReturnType<typeof createRealtimeError>) => void
 ): ClientTransportEventReceiver {
   return (event: ClientTransportEvent) => {
     const contract = registry.events.byName[
@@ -1006,13 +1214,12 @@ function createTransportEventReceiver(
       event.route.channelId !== undefined &&
       !channelSubscriptions.has(event.route.channelId)
     ) {
-      reportClientRuntimeError(
+      reportRuntimeError(
         normalizeClientEventRouteMismatchError(
           contract.name,
           event.route.channelId,
           event.route.target
-        ),
-        onError
+        )
       );
       return;
     }
@@ -1023,7 +1230,7 @@ function createTransportEventReceiver(
       payload = parseEventPayload(contract, event.payload);
     } catch (error) {
       if (isRealtimeError(error)) {
-        reportClientRuntimeError(error, onError);
+        reportRuntimeError(error);
         return;
       }
 
@@ -1039,13 +1246,12 @@ function createTransportEventReceiver(
           applier.apply(payload);
         } catch (error) {
           if (isRealtimeError(error)) {
-            reportClientRuntimeError(error, onError);
+            reportRuntimeError(error);
             continue;
           }
 
-          reportClientRuntimeError(
-            normalizeClientEventApplierError(error, contract.name),
-            onError
+          reportRuntimeError(
+            normalizeClientEventApplierError(error, contract.name)
           );
         }
       }
@@ -1056,7 +1262,13 @@ function createTransportEventReceiver(
     }
 
     for (const listener of [...bucket]) {
-      listener(payload as never);
+      try {
+        listener(payload as never);
+      } catch (error) {
+        reportRuntimeError(
+          normalizeClientEventListenerError(error, contract.name)
+        );
+      }
     }
   };
 }
@@ -1068,50 +1280,53 @@ function resolveClientCommandResult(
   sendCommand: NonNullable<ClientTransport["sendCommand"]>,
   request: ClientTransportCommandRequest,
   commandName: string,
-  timeoutMs: number | undefined
+  timeoutMs: number | undefined,
+  signal?: AbortSignal
 ): Promise<CommandResult> {
-  const pendingResult = Promise.resolve(sendCommand(request));
-
-  if (timeoutMs === undefined) {
-    return pendingResult;
-  }
-
-  assertClientCommandTimeout(timeoutMs);
-
-  return new Promise<CommandResult>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(
+  return resolveClientTransportOperation(
+    () => sendCommand(request),
+    {
+      timeoutMs,
+      signal,
+      createTimeoutError: () =>
         createRealtimeError({
           code: "timeout",
           message: `Command timed out: "${commandName}".`,
+          details:
+            timeoutMs === undefined
+              ? {
+                  commandName
+                }
+              : {
+                  commandName,
+                  timeoutMs
+                }
+        }),
+      createAbortError: () =>
+        createRealtimeError({
+          code: "internal-error",
+          message: `Client command execution was aborted: "${commandName}".`,
           details: {
             commandName,
-            timeoutMs
+            stage: "transport",
+            reason: "aborted"
           }
         })
-      );
-    }, timeoutMs);
-
-    pendingResult.then(
-      (result) => {
-        clearTimeout(timeoutId);
-        resolve(result);
-      },
-      (error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      }
-    );
-  });
+    }
+  );
 }
 
 /**
  * Нормализует transport-ошибку client command flow в единый realtime error shape.
  */
-function normalizeClientCommandTransportError(
+function normalizeClientCommandTransportFailure(
   error: unknown,
   commandName: string
 ) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
   return createRealtimeError({
     code: "command-failed",
     message: `Client command execution failed at stage "transport": "${commandName}".`,
@@ -1124,22 +1339,182 @@ function normalizeClientCommandTransportError(
 }
 
 /**
- * Проверяет корректность timeout-параметра command execution.
+ * Разрешает timeout-значение вызова или дефолта runtime и поддерживает
+ * явное отключение дедлайна через `false`.
  */
-function assertClientCommandTimeout(timeoutMs: number): void {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new TypeError("Client command timeout must be a positive finite number.");
+function resolveClientTimeoutMs(
+  timeoutMs: number | false | undefined,
+  fallbackTimeoutMs: number | undefined,
+  label: string
+): number | undefined {
+  if (timeoutMs === false) {
+    return undefined;
   }
+
+  const resolvedTimeoutMs = timeoutMs ?? fallbackTimeoutMs;
+
+  if (resolvedTimeoutMs === undefined) {
+    return undefined;
+  }
+
+  assertPositiveFiniteTimeout(resolvedTimeoutMs, label);
+
+  return resolvedTimeoutMs;
+}
+
+/**
+ * Проверяет корректность timeout-параметра runtime-операции.
+ */
+function assertPositiveFiniteTimeout(timeoutMs: number, label: string): void {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError(`${label} must be a positive finite number or false.`);
+  }
+}
+
+/**
+ * Выполняет transport-операцию с единым timeout/abort поведением.
+ */
+function resolveClientTransportOperation<T>(
+  operation: () => T | Promise<T>,
+  options: {
+    readonly timeoutMs: number | undefined;
+    readonly signal: AbortSignal | undefined;
+    readonly createTimeoutError: () => ReturnType<typeof createRealtimeError>;
+    readonly createAbortError: () => ReturnType<typeof createRealtimeError>;
+  }
+): Promise<T> {
+  const { timeoutMs, signal, createTimeoutError, createAbortError } = options;
+  const invokeOperation = (): Promise<T> => {
+    try {
+      return Promise.resolve(operation());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+
+  if (signal?.aborted === true) {
+    return Promise.reject(createAbortError());
+  }
+
+  if (timeoutMs === undefined && signal === undefined) {
+    return invokeOperation();
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let removeAbortListener: (() => void) | undefined;
+
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+
+      removeAbortListener?.();
+      callback();
+    };
+
+    if (timeoutMs !== undefined) {
+      timeoutId = setTimeout(() => {
+        settle(() => {
+          reject(createTimeoutError());
+        });
+      }, timeoutMs);
+    }
+
+    if (signal !== undefined) {
+      const abortHandler = () => {
+        settle(() => {
+          reject(createAbortError());
+        });
+      };
+
+      signal.addEventListener("abort", abortHandler, {
+        once: true
+      });
+      removeAbortListener = () => {
+        signal.removeEventListener("abort", abortHandler);
+      };
+    }
+
+    const pendingOperation = invokeOperation();
+
+    pendingOperation.then(
+      (result) => {
+        settle(() => {
+          resolve(result);
+        });
+      },
+      (error) => {
+        settle(() => {
+          reject(error);
+        });
+      }
+    );
+  });
+}
+
+/**
+ * Создает timeout-ошибку channel operation с единым shape.
+ */
+function createClientChannelOperationTimeoutError(
+  channelName: string,
+  stage: "subscribe" | "unsubscribe" | "resubscribe",
+  timeoutMs: number | undefined
+) {
+  return createRealtimeError({
+    code: "timeout",
+    message: `Client channel operation timed out at stage "${stage}": "${channelName}".`,
+    details:
+      timeoutMs === undefined
+        ? {
+            channelName,
+            stage
+          }
+        : {
+            channelName,
+            stage,
+            timeoutMs
+          }
+  });
+}
+
+/**
+ * Создает abort-ошибку channel operation с единым shape.
+ */
+function createClientChannelOperationAbortError(
+  channelName: string,
+  stage: "subscribe" | "unsubscribe" | "resubscribe"
+) {
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Client channel operation was aborted at stage "${stage}": "${channelName}".`,
+    details: {
+      channelName,
+      stage,
+      reason: "aborted"
+    }
+  });
 }
 
 /**
  * Нормализует transport-ошибку channel subscription flow в общий realtime error.
  */
-function normalizeClientChannelTransportError(
+function normalizeClientChannelOperationFailure(
   error: unknown,
   channelName: string,
   stage: "subscribe" | "unsubscribe" | "resubscribe"
 ) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
   return createRealtimeError({
     code: "internal-error",
     message: `Client channel operation failed at stage "${stage}": "${channelName}".`,
@@ -1149,6 +1524,17 @@ function normalizeClientChannelTransportError(
     },
     cause: error
   });
+}
+
+/**
+ * Нормализует best-effort transport cleanup ошибку channel operation.
+ */
+function normalizeClientChannelOperationTransportError(
+  error: unknown,
+  channelName: string,
+  stage: "subscribe" | "unsubscribe" | "resubscribe"
+) {
+  return normalizeClientChannelOperationFailure(error, channelName, stage);
 }
 
 /**
@@ -1164,6 +1550,72 @@ function normalizeClientEventApplierError(
     details: {
       eventName,
       stage: "apply"
+    },
+    cause: error
+  });
+}
+
+/**
+ * Нормализует ошибку user event listener-а в общий realtime error.
+ */
+function normalizeClientEventListenerError(
+  error: unknown,
+  eventName: string
+) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Client event listener failed at stage "listener": "${eventName}".`,
+    details: {
+      eventName,
+      stage: "listener"
+    },
+    cause: error
+  });
+}
+
+/**
+ * Нормализует ошибку system-event listener-а в общий realtime error.
+ */
+function normalizeClientSystemEventListenerError(
+  error: unknown,
+  systemEventName: SystemEventName
+) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Client system event listener failed at stage "listener": "${systemEventName}".`,
+    details: {
+      systemEventName,
+      stage: "listener"
+    },
+    cause: error
+  });
+}
+
+/**
+ * Нормализует ошибку connection-state listener-а в общий realtime error.
+ */
+function normalizeClientConnectionListenerError(
+  error: unknown,
+  state: ClientConnectionLifecycleState
+) {
+  if (isRealtimeError(error)) {
+    return error;
+  }
+
+  return createRealtimeError({
+    code: "internal-error",
+    message: `Client connection listener failed at state "${state}".`,
+    details: {
+      state,
+      stage: "listener"
     },
     cause: error
   });

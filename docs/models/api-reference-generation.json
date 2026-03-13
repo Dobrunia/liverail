@@ -20,6 +20,17 @@
     ]
   },
   "packages": {
+    "@liverail/contracts": {
+      "packageJsonPath": "packages/contracts/package.json",
+      "outputPath": "docs/api/contracts.md",
+      "sourceEntrypoints": [
+        "packages/contracts/src/index.ts"
+      ],
+      "entryExportPaths": [
+        "."
+      ],
+      "metadataPath": "docs/metadata/contracts.api-reference.json"
+    },
     "@liverail/server": {
       "packageJsonPath": "packages/server/package.json",
       "outputPath": "docs/api/server.md",

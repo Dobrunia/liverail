@@ -183,6 +183,7 @@ test("should publish resubscription failures through the dedicated system event 
     status: "connected"
   });
   await Promise.resolve();
+  await Promise.resolve();
 
   assert.deepEqual(seenEvents, [
     "voice-room:room-1:internal-error"

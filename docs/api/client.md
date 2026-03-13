@@ -28,6 +28,7 @@ Full public API reference for the client runtime and its official subpath export
 - `ClientRuntimeState`: Стабильное operational-состояние client runtime.
 - `ClientRuntime`: Базовый client runtime, который знает про registry и lifecycle transport-а.
 - `CreateClientRuntimeOptions`: Параметры создания transport-agnostic client runtime.
+- `ExecuteClientChannelOperationOptions`: Параметры subscribe/unsubscribe channel operations в client runtime.
 - `ExecuteClientCommandOptions`: Параметры выполнения typed команды в client runtime.
 - `ClientEventListener`: Пользовательский listener конкретного typed события.
 - `ClientSystemEventListener`: Пользовательский listener конкретного typed system event.

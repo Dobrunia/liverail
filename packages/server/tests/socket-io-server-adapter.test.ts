@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { createServer, type Server as HttpServer } from "node:http";
 
 import { io as createSocketClient, type Socket as ClientSocket } from "socket.io-client";
-import { Server as SocketIoServer } from "socket.io";
+import {
+  Server as SocketIoServer,
+  type Socket as SocketIoServerSocket
+} from "socket.io";
 import { test } from "vitest";
 import { z } from "zod";
 
@@ -15,7 +18,9 @@ import {
   receivePolicy
 } from "@liverail/contracts";
 import {
-  createServerRuntime
+  createServerRuntime,
+  type ServerEventRoute,
+  type ServerEventRecipient
 } from "../src/index.ts";
 import {
   createSocketIoChannelRoute,
@@ -458,6 +463,179 @@ test("should enforce receive policies before Socket.IO channel delivery", async 
 });
 
 /**
+ * Проверяет, что receive policy теперь применяется к конкретным участникам
+ * внутри одного и того же channel route, а не только к room как целому.
+ * Это важно, потому что до исправления `createSocketIoChannelRoute` вместе с
+ * Socket.IO deliverer-ом фактически обходили per-recipient policy enforcement:
+ * одно разрешение на route означало broadcast всей room. Также покрывается
+ * corner case с двумя участниками одной room, чтобы deny второго получателя
+ * не мешал доставке первому и не требовал ручного fan-out в user-коде.
+ */
+test("should enforce receive policies per recipient inside the same Socket.IO room", async () => {
+  const harness = await createSocketIoHarness();
+  const voiceRoom = channel("voice-room", {
+    key: z.object({
+      roomId: z.string().min(1)
+    })
+  });
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  const registry = createContractRegistry({
+    channels: [voiceRoom] as const,
+    events: [messageCreated] as const
+  });
+  type RuntimeContext = {
+    readonly userId: string;
+    readonly allowedSocketId?: string;
+  };
+  const runtime = createServerRuntime<RuntimeContext, typeof registry>({
+    registry,
+    eventReceivePolicies: {
+      "message-created": [
+        receivePolicy<
+          "can-receive-room-message",
+          typeof messageCreated,
+          RuntimeContext,
+          ServerEventRoute,
+          "forbidden",
+          ServerEventRecipient<RuntimeContext>
+        >("can-receive-room-message", {
+          evaluate({ recipient, context }) {
+            return recipient?.memberId === context.allowedSocketId;
+          }
+        })
+      ]
+    },
+    eventRouters: {
+      "message-created": () => createSocketIoChannelRoute("voice-room", {
+        roomId: "room-1"
+      })
+    },
+    eventDeliverers: {
+      "message-created": createSocketIoEventDeliverer(harness.io)
+    }
+  });
+
+  createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext(socket) {
+      return {
+        userId: String(socket.handshake.auth.userId ?? "")
+      };
+    }
+  });
+
+  const allowedClient = createSocketClient(harness.url, {
+    auth: {
+      userId: "allowed-user"
+    },
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+  const blockedClient = createSocketClient(harness.url, {
+    auth: {
+      userId: "blocked-user"
+    },
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await Promise.all([
+      waitForSocketEvent(allowedClient, "connect"),
+      waitForSocketEvent(blockedClient, "connect")
+    ]);
+
+    await emitWithAck(allowedClient, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+    await emitWithAck(blockedClient, SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "voice-room",
+      key: {
+        roomId: "room-1"
+      }
+    });
+
+    const allowedDelivery = waitForSocketEvent<{ text: string }>(
+      allowedClient,
+      "message-created"
+    );
+    let blockedReceived = false;
+
+    blockedClient.once("message-created", () => {
+      blockedReceived = true;
+    });
+
+    const deliveries = await runtime.emitEvent("message-created", {
+      text: "recipient-filtered"
+    }, {
+      context: {
+        userId: "server",
+        allowedSocketId: allowedClient.id ?? ""
+      }
+    });
+    await wait(50);
+
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0]?.recipient?.memberId, allowedClient.id);
+    assert.deepEqual(await allowedDelivery, {
+      text: "recipient-filtered"
+    });
+    assert.equal(blockedReceived, false);
+  } finally {
+    allowedClient.disconnect();
+    blockedClient.disconnect();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что Socket.IO deliverer больше не принимает неразвернутый
+ * channel route напрямую и не делает room-wide broadcast без явного
+ * per-member fan-out от runtime.
+ * Это важно, потому что иначе transport helper по-прежнему оставался бы
+ * обходным путем мимо исправленного receive-policy enforcement.
+ */
+test("should reject unresolved Socket.IO channel routes at delivery time", async () => {
+  const harness = await createSocketIoHarness();
+  const messageCreated = event("message-created", {
+    payload: z.object({
+      text: z.string()
+    })
+  });
+  const deliverer = createSocketIoEventDeliverer(harness.io);
+
+  try {
+    await assert.rejects(
+      () =>
+        Promise.resolve(deliverer({
+          contract: messageCreated,
+          name: "message-created",
+          payload: {
+            text: "unsafe-broadcast"
+          },
+          context: {},
+          route: createSocketIoChannelRoute("voice-room", {
+            roomId: "room-1"
+          })
+        })),
+      /concrete memberId/
+    );
+  } finally {
+    await harness.close();
+  }
+});
+
+/**
  * Проверяет, что неуспешный `socket.join()` не оставляет после себя runtime
  * membership, если transport-level привязка комнаты сорвалась уже после
  * успешной server-side авторизации и создания channel membership.
@@ -685,6 +863,146 @@ test("should keep runtime and transport membership aligned when Socket.IO leave 
     }), []);
     assert.equal(receivedAfterSuccessfulLeave, false);
   } finally {
+    client.disconnect();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что после `dispose()` можно безопасно создать новый adapter на
+ * том же `io` и namespace без наследования middleware от старого экземпляра.
+ * Это важно, потому что старый teardown-path снимал только `connection`
+ * listener и оставлял disposed middleware активным, из-за чего новые
+ * подключения после recreate стабильно падали с `adapter is disposed`.
+ */
+test("should allow recreating the Socket.IO server adapter after dispose", async () => {
+  const harness = await createSocketIoHarness();
+  const runtime = createServerRuntime({
+    registry: createContractRegistry({})
+  });
+  const firstAdapter = createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+
+  firstAdapter.dispose();
+
+  const secondAdapter = createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+  const client = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    const result = await Promise.race([
+      waitForSocketEvent(client, "connect").then(() => "connected" as const),
+      waitForSocketEvent<Error & {
+        readonly data?: {
+          readonly code?: string;
+        };
+      }>(client, "connect_error").then((error) => ({
+        status: "error" as const,
+        code: error.data?.code
+      }))
+    ]);
+
+    assert.deepEqual(result, "connected");
+  } finally {
+    client.disconnect();
+    secondAdapter.dispose();
+    await harness.close();
+  }
+});
+
+/**
+ * Проверяет, что `dispose()` снимает только liveRail-обработчики конкретного
+ * сокета и не удаляет чужие listeners на тех же transport event names.
+ * Это важно, потому что Socket.IO boundary может разделяться с кодом
+ * приложения, и teardown адаптера не должен ломать постороннюю интеграцию.
+ */
+test("should preserve foreign Socket.IO listeners when disposing the adapter", async () => {
+  const harness = await createSocketIoHarness();
+  const runtime = createServerRuntime({
+    registry: createContractRegistry({})
+  });
+  const adapter = createSocketIoServerAdapter({
+    io: harness.io,
+    runtime,
+    resolveContext() {
+      return {};
+    }
+  });
+  const seenEvents: string[] = [];
+  let serverSocket:
+    | SocketIoServerSocket
+    | undefined;
+  let restoreDisconnect: (() => void) | undefined;
+
+  harness.io.on("connection", (socket) => {
+    serverSocket = socket;
+    socket.on(SOCKET_IO_COMMAND_EVENT, (request: { name?: string }) => {
+      seenEvents.push(`command:${request.name ?? "unknown"}`);
+    });
+    socket.on(SOCKET_IO_CHANNEL_JOIN_EVENT, (request: { name?: string }) => {
+      seenEvents.push(`join:${request.name ?? "unknown"}`);
+    });
+    socket.on(SOCKET_IO_CHANNEL_LEAVE_EVENT, (request: { name?: string }) => {
+      seenEvents.push(`leave:${request.name ?? "unknown"}`);
+    });
+
+    const originalDisconnect = socket.disconnect.bind(socket);
+
+    socket.disconnect = (() => socket) as typeof socket.disconnect;
+    restoreDisconnect = () => {
+      socket.disconnect = originalDisconnect;
+    };
+  });
+
+  const client = createSocketClient(harness.url, {
+    forceNew: true,
+    reconnection: false,
+    transports: ["websocket"]
+  });
+
+  try {
+    await waitForSocketEvent(client, "connect");
+    await wait(25);
+
+    assert.ok(serverSocket !== undefined);
+
+    adapter.dispose();
+
+    client.emit(SOCKET_IO_COMMAND_EVENT, {
+      name: "foreign-command",
+      input: undefined
+    });
+    client.emit(SOCKET_IO_CHANNEL_JOIN_EVENT, {
+      name: "foreign-join",
+      key: undefined
+    });
+    client.emit(SOCKET_IO_CHANNEL_LEAVE_EVENT, {
+      name: "foreign-leave",
+      key: undefined
+    });
+    await wait(25);
+
+    assert.deepEqual(seenEvents, [
+      "command:foreign-command",
+      "join:foreign-join",
+      "leave:foreign-leave"
+    ]);
+  } finally {
+    restoreDisconnect?.();
     client.disconnect();
     await harness.close();
   }

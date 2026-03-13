@@ -234,7 +234,8 @@ export interface CommandPolicyContext<
 export interface ReceivePolicyContext<
   TEvent extends EventContract = EventContract,
   TRuntimeContext = unknown,
-  TRoute = unknown
+  TRoute = unknown,
+  TRecipient = unknown
 > {
   /**
    * Контракт доставляемого события.
@@ -260,6 +261,12 @@ export interface ReceivePolicyContext<
    * Runtime-контекст receive-проверки.
    */
   readonly context: TRuntimeContext;
+
+  /**
+   * Необязательный конкретный получатель доставки, если runtime уже сузил
+   * broadcast-route до отдельного участника.
+   */
+  readonly recipient?: TRecipient;
 }
 
 /**
@@ -337,10 +344,11 @@ export type ReceivePolicyContract<
   TEvent extends EventContract = EventContract,
   TRuntimeContext = unknown,
   TRoute = unknown,
-  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode
+  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode,
+  TRecipient = unknown
 > = PolicyContract<
   TName,
-  ReceivePolicyContext<TEvent, TRuntimeContext, TRoute>,
+  ReceivePolicyContext<TEvent, TRuntimeContext, TRoute, TRecipient>,
   "receive",
   TCode
 >;
@@ -382,9 +390,10 @@ export interface ReceivePolicyOptions<
   TEvent extends EventContract = EventContract,
   TRuntimeContext = unknown,
   TRoute = unknown,
-  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode
+  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode,
+  TRecipient = unknown
 > extends PolicyOptions<
-    ReceivePolicyContext<TEvent, TRuntimeContext, TRoute>,
+    ReceivePolicyContext<TEvent, TRuntimeContext, TRoute, TRecipient>,
     "receive",
     TCode
   > {}
@@ -534,15 +543,36 @@ export function receivePolicy<
   TEvent extends EventContract = EventContract,
   TRuntimeContext = unknown,
   TRoute = unknown,
-  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode
+  TCode extends ReceivePolicyErrorCode = ReceivePolicyErrorCode,
+  TRecipient = unknown
 >(
   name: TName,
-  options: ReceivePolicyOptions<TEvent, TRuntimeContext, TRoute, TCode>
-): ReceivePolicyContract<TName, TEvent, TRuntimeContext, TRoute, TCode> {
+  options: ReceivePolicyOptions<
+    TEvent,
+    TRuntimeContext,
+    TRoute,
+    TCode,
+    TRecipient
+  >
+): ReceivePolicyContract<
+  TName,
+  TEvent,
+  TRuntimeContext,
+  TRoute,
+  TCode,
+  TRecipient
+> {
   return policy(name, {
     ...options,
     scope: "receive"
-  }) as ReceivePolicyContract<TName, TEvent, TRuntimeContext, TRoute, TCode>;
+  }) as ReceivePolicyContract<
+    TName,
+    TEvent,
+    TRuntimeContext,
+    TRoute,
+    TCode,
+    TRecipient
+  >;
 }
 
 /**

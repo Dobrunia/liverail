@@ -14,6 +14,7 @@ export type {
   ClientRuntimeState,
   ClientRuntime,
   CreateClientRuntimeOptions,
+  ExecuteClientChannelOperationOptions,
   ExecuteClientCommandOptions
 } from "./runtime/index.ts";
 

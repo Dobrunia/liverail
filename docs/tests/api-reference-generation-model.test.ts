@@ -31,13 +31,13 @@ type ApiReferenceGenerationModel = {
 
 /**
  * Проверяет, что для полного API-справочника есть отдельная machine-readable
- * модель, а не неявная договоренность "как-нибудь собрать markdown потом".
+ * модель для всех публичных пакетов, а не неявная договоренность "как-нибудь собрать markdown потом".
  * Это важно, потому что LLM-friendly reference должен строиться из тех же
  * официальных exports и JSDoc, что и package README, но в более полном формате.
  * Также покрывается corner case со стабильностью формата: обе пакетные схемы
  * должны использовать одинаковый output style и не включать внутренние файлы.
  */
-test("should define a machine-readable full API reference generation model for server and client", () => {
+test("should define a machine-readable full API reference generation model for every public package", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");
   const model = JSON.parse(
     readFileSync(
@@ -59,9 +59,19 @@ test("should define a machine-readable full API reference generation model for s
     exclude: ["internal-files", "tests", "types-directories"]
   });
   assert.deepEqual(Object.keys(model.packages), [
+    "@liverail/contracts",
     "@liverail/server",
     "@liverail/client"
   ]);
+  assert.deepEqual(model.packages["@liverail/contracts"], {
+    packageJsonPath: "packages/contracts/package.json",
+    outputPath: "docs/api/contracts.md",
+    sourceEntrypoints: [
+      "packages/contracts/src/index.ts"
+    ],
+    entryExportPaths: ["."],
+    metadataPath: "docs/metadata/contracts.api-reference.json"
+  });
   assert.deepEqual(model.packages["@liverail/server"], {
     packageJsonPath: "packages/server/package.json",
     outputPath: "docs/api/server.md",

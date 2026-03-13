@@ -62,6 +62,7 @@ test("should restore active channel subscriptions after reconnect", async () => 
   connectionReceiver?.({
     status: "connected"
   });
+  await Promise.resolve();
 
   assert.deepEqual(calls, [
     'subscribe:voice-room:{"roomId":"room-1"}',
@@ -133,6 +134,7 @@ test("should clear failed resubscriptions from runtime state and report them thr
     status: "connected"
   });
   await Promise.resolve();
+  await Promise.resolve();
 
   assert.equal(capturedErrors.length, 1);
   assert.ok(isRealtimeError(capturedErrors[0]));
@@ -151,6 +153,7 @@ test("should clear failed resubscriptions from runtime state and report them thr
   connectionReceiver?.({
     status: "connected"
   });
+  await Promise.resolve();
   await Promise.resolve();
 
   assert.equal(subscribeCallCount, 2);

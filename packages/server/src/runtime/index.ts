@@ -700,6 +700,21 @@ export interface ServerEventEmission<
 }
 
 /**
+ * Конкретный получатель delivery после fan-out channel audience до участника.
+ */
+export interface ServerEventRecipient<TRuntimeContext = unknown> {
+  /**
+   * Идентификатор участника, которому адресована финальная доставка.
+   */
+  readonly memberId: string;
+
+  /**
+   * Runtime-контекст конкретного участника.
+   */
+  readonly context: TRuntimeContext;
+}
+
+/**
  * Финальная delivery-запись конкретного server event.
  */
 export interface ServerEventDelivery<
@@ -710,6 +725,11 @@ export interface ServerEventDelivery<
    * Маршрут, по которому событие должно быть доставлено.
    */
   readonly route: ServerEventRoute;
+
+  /**
+   * Конкретный получатель, если route был сузлен до отдельного участника.
+   */
+  readonly recipient?: ServerEventRecipient<TRuntimeContext>;
 }
 
 /**
@@ -800,7 +820,9 @@ export type ServerEventReceivePolicies<
     string,
     TRegistry["events"]["byName"][TName],
     TRuntimeContext,
-    ServerEventRoute
+    ServerEventRoute,
+    any,
+    ServerEventRecipient<TRuntimeContext>
   >[];
 }>;
 
@@ -1100,7 +1122,9 @@ export function createServerRuntime<
           string,
           EventContract,
           TRuntimeContext,
-          ServerEventRoute
+          ServerEventRoute,
+          any,
+          ServerEventRecipient<TRuntimeContext>
         >[]
       | undefined;
 
@@ -1127,15 +1151,14 @@ export function createServerRuntime<
     }
 
     const normalizedRoutes = Array.isArray(routes) ? routes : [routes];
+    const resolvedDeliveries = createServerEventDeliveries(
+      emission,
+      normalizedRoutes
+    );
     const delivered: ServerEventDelivery<EventContract, TRuntimeContext>[] = [];
     const denied: ServerDeniedEventDelivery<EventContract, TRuntimeContext>[] = [];
 
-    for (const route of normalizedRoutes) {
-      const delivery = {
-        ...emission,
-        route
-      } as ServerEventDelivery<EventContract, TRuntimeContext>;
-
+    for (const delivery of resolvedDeliveries) {
       if (receivePolicies !== undefined) {
         let deniedError: RealtimeErrorPayload | undefined;
 
@@ -1187,6 +1210,70 @@ export function createServerRuntime<
         TRuntimeContext
       >[]
     }) as ServerEventEmissionReport<EventContract, TRuntimeContext>;
+  }
+
+  function createServerEventDeliveries<TEvent extends EventContract>(
+    emission: ServerEventEmission<TEvent, TRuntimeContext>,
+    routes: readonly ServerEventRoute[]
+  ): readonly ServerEventDelivery<TEvent, TRuntimeContext>[] {
+    const deliveries: ServerEventDelivery<TEvent, TRuntimeContext>[] = [];
+
+    for (const route of routes) {
+      const expandedDeliveries = expandServerEventRoute(route, emission);
+
+      if (expandedDeliveries !== undefined) {
+        deliveries.push(...expandedDeliveries);
+        continue;
+      }
+
+      deliveries.push(
+        Object.freeze({
+          ...emission,
+          route
+        }) as ServerEventDelivery<TEvent, TRuntimeContext>
+      );
+    }
+
+    return Object.freeze([...deliveries]) as readonly ServerEventDelivery<
+      TEvent,
+      TRuntimeContext
+    >[];
+  }
+
+  function expandServerEventRoute<TEvent extends EventContract>(
+    route: ServerEventRoute,
+    emission: ServerEventEmission<TEvent, TRuntimeContext>
+  ): readonly ServerEventDelivery<TEvent, TRuntimeContext>[] | undefined {
+    const channelId = readChannelAudienceRouteId(route);
+
+    if (channelId === undefined) {
+      return undefined;
+    }
+
+    const membershipBucket = channelMemberships.get(channelId);
+
+    if (membershipBucket === undefined || membershipBucket.size === 0) {
+      return Object.freeze([]) as readonly ServerEventDelivery<
+        TEvent,
+        TRuntimeContext
+      >[];
+    }
+
+    const deliveries = [...membershipBucket.values()].map((membership) =>
+      Object.freeze({
+        ...emission,
+        route: freezeMemberScopedServerRoute(route, membership.memberId),
+        recipient: Object.freeze({
+          memberId: membership.memberId,
+          context: membership.context
+        }) as ServerEventRecipient<TRuntimeContext>
+      }) as ServerEventDelivery<TEvent, TRuntimeContext>
+    );
+
+    return Object.freeze(deliveries) as readonly ServerEventDelivery<
+      TEvent,
+      TRuntimeContext
+    >[];
   }
   const lifecycleBridge = Object.freeze({
     notifyConnected: async (
@@ -1798,6 +1885,44 @@ function getChannelMembershipBucketKey(
   key: ChannelKey<ChannelContract>
 ): string {
   return stringifyChannelInstance(channelName, key);
+}
+
+function readChannelAudienceRouteId(route: ServerEventRoute): string | undefined {
+  if (route.target !== "channel") {
+    return undefined;
+  }
+
+  const channelId = route.metadata?.channelId;
+
+  if (typeof channelId !== "string" || channelId.length === 0) {
+    return undefined;
+  }
+
+  if (typeof route.metadata?.memberId === "string") {
+    return undefined;
+  }
+
+  return channelId;
+}
+
+function freezeMemberScopedServerRoute(
+  route: ServerEventRoute,
+  memberId: string
+): ServerEventRoute {
+  const metadata =
+    route.metadata === undefined
+      ? Object.freeze({
+          memberId
+        })
+      : Object.freeze({
+          ...route.metadata,
+          memberId
+        });
+
+  return Object.freeze({
+    target: route.target,
+    metadata
+  });
 }
 
 async function callServerLifecycleHook(

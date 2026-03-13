@@ -5,7 +5,10 @@ import {
   event,
   type EventPayload
 } from "@liverail/contracts";
-import { createServerRuntime } from "../src/index.js";
+import {
+  createServerRuntime,
+  type ServerEventRecipient
+} from "../src/index.js";
 
 /**
  * Проверяет на уровне типов, что event pipeline сохраняет точные типы payload,
@@ -59,6 +62,7 @@ const runtime = createServerRuntime<{ requestId: string }, typeof registry>({
               readonly target: string;
               readonly metadata?: Readonly<Record<string, unknown>>;
             };
+            readonly recipient?: ServerEventRecipient<{ requestId: string }>;
           }
         >
       >;
@@ -94,6 +98,7 @@ type ShouldReturnTypedEventDeliveries = Assert<
           readonly target: string;
           readonly metadata?: Readonly<Record<string, unknown>>;
         };
+        readonly recipient?: ServerEventRecipient<{ requestId: string }>;
       }[]
     >
   >

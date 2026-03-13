@@ -1,0 +1,32 @@
+{
+  "packageName": "@liverail/contracts",
+  "title": "@liverail/contracts",
+  "summary": "Shared contract layer for commands, events, channels, policies, validation and registry composition.",
+  "sections": [
+    {
+      "id": "contracts",
+      "title": "Contract Primitives",
+      "summary": "Define commands, events and channels from one typed contract surface."
+    },
+    {
+      "id": "errors",
+      "title": "Validation and Errors",
+      "summary": "Normalize validation and runtime failures into one transport-safe realtime error model."
+    },
+    {
+      "id": "policies",
+      "title": "Policies",
+      "summary": "Compose access-control and delivery rules with explicit policy contracts."
+    },
+    {
+      "id": "registry",
+      "title": "Registry and Introspection",
+      "summary": "Group public contracts into a single registry and inspect it without reaching into package internals."
+    }
+  ],
+  "bestPractices": [
+    "Keep shared schemas and contract names in this package so client and server stay aligned.",
+    "Prefer the normalized realtime error helpers over ad-hoc transport-specific error payloads.",
+    "Build one explicit contract registry per application boundary instead of importing random primitives at runtime."
+  ]
+}

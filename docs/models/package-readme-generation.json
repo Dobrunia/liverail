@@ -7,6 +7,17 @@
     "metadata": "docs-metadata"
   },
   "packages": {
+    "@liverail/contracts": {
+      "packageJsonPath": "packages/contracts/package.json",
+      "outputPath": "packages/contracts/README.md",
+      "sourceEntrypoints": [
+        "packages/contracts/src/index.ts"
+      ],
+      "entryExportPaths": [
+        "."
+      ],
+      "metadataPath": "docs/metadata/contracts.package-readme.json"
+    },
     "@liverail/server": {
       "packageJsonPath": "packages/server/package.json",
       "outputPath": "packages/server/README.md",

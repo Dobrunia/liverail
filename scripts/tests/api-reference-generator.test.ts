@@ -8,7 +8,7 @@ import { generateApiReferences } from "../src/api-reference-generator.mjs";
 
 /**
  * Проверяет, что локальный генератор полного API reference воспроизводит
- * текущие файлы `docs/api/*.md` из общей модели и официальных exports.
+ * текущие файлы `docs/api/*.md` для `contracts`, `server` и `client`.
  * Это важно, потому что reference должен оставаться полным и машинно-удобным,
  * а не редактироваться руками после каждого изменения публичного API.
  * Также учитывается corner case с package boundaries: генератор читает
@@ -18,7 +18,7 @@ test("should generate full API reference files from the public export model", ()
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");
   const generated = generateApiReferences({ repositoryRoot });
 
-  assert.equal(generated.length, 2);
+  assert.equal(generated.length, 3);
 
   for (const entry of generated) {
     const currentContent = readFileSync(

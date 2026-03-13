@@ -227,9 +227,35 @@ export function createSocketIoServerAdapter<
     string,
     Map<string, SocketIoChannelRequest>
   >();
-  const disconnectHandlersBySocketId = new Map<string, () => void>();
+  const socketHandlersBySocketId = new Map<
+    string,
+    {
+      readonly command: (request: unknown, acknowledge: unknown) => void;
+      readonly join: (request: unknown, acknowledge: unknown) => void;
+      readonly leave: (request: unknown, acknowledge: unknown) => void;
+      readonly disconnect: () => void;
+    }
+  >();
   const namespace = options.io.of("/");
   let isDisposed = false;
+
+  const buildSocketContext = async (
+    socket: SocketIoSocket
+  ): Promise<TRuntimeContext> => {
+    if (typeof options.injectContext === "function") {
+      const injectedContext = await options.injectContext(socket);
+
+      return createServerRuntimeContext({
+        connectionId: socket.id,
+        transport: "socket.io",
+        session: injectedContext.session,
+        user: injectedContext.user,
+        metadata: injectedContext.metadata
+      }) as TRuntimeContext;
+    }
+
+    return options.resolveContext!(socket);
+  };
 
   const resolveSocketContext = async (
     socket: SocketIoSocket
@@ -238,21 +264,7 @@ export function createSocketIoServerAdapter<
       return contextBySocketId.get(socket.id) as TRuntimeContext;
     }
 
-    let context: TRuntimeContext;
-
-    if (typeof options.injectContext === "function") {
-      const injectedContext = await options.injectContext(socket);
-
-      context = createServerRuntimeContext({
-        connectionId: socket.id,
-        transport: "socket.io",
-        session: injectedContext.session,
-        user: injectedContext.user,
-        metadata: injectedContext.metadata
-      }) as TRuntimeContext;
-    } else {
-      context = await options.resolveContext!(socket);
-    }
+    const context = await buildSocketContext(socket);
 
     contextBySocketId.set(socket.id, context);
 
@@ -272,14 +284,27 @@ export function createSocketIoServerAdapter<
       return;
     }
 
-    void resolveSocketContext(socket)
-      .then((context) => options.runtime.authorizeConnection({
-        context
-      }))
-      .then(() => {
+    void buildSocketContext(socket)
+      .then(async (context) => {
+        await options.runtime.authorizeConnection({
+          context
+        });
+
+        if (isDisposed) {
+          throw createRealtimeError({
+            code: "internal-error",
+            message: "Socket.IO server adapter is disposed."
+          });
+        }
+
+        return context;
+      })
+      .then((context) => {
+        contextBySocketId.set(socket.id, context);
         next();
       })
       .catch((error: unknown) => {
+        contextBySocketId.delete(socket.id);
         next(createSocketIoConnectError(
           normalizeSocketIoConnectionError(error).toJSON()
         ));
@@ -298,7 +323,7 @@ export function createSocketIoServerAdapter<
           context
         });
 
-        socket.on(commandEvent, (request, acknowledge) => {
+        const commandHandler = (request: unknown, acknowledge: unknown) => {
           void handleSocketIoCommandRequest(
             socket,
             request,
@@ -306,8 +331,8 @@ export function createSocketIoServerAdapter<
             options.runtime,
             resolveSocketContext
           );
-        });
-        socket.on(joinEvent, (request, acknowledge) => {
+        };
+        const joinHandler = (request: unknown, acknowledge: unknown) => {
           void handleSocketIoChannelRequest(
             socket,
             request,
@@ -317,8 +342,8 @@ export function createSocketIoServerAdapter<
             resolveSocketContext,
             joinedChannelsBySocketId
           );
-        });
-        socket.on(leaveEvent, (request, acknowledge) => {
+        };
+        const leaveHandler = (request: unknown, acknowledge: unknown) => {
           void handleSocketIoChannelRequest(
             socket,
             request,
@@ -328,9 +353,9 @@ export function createSocketIoServerAdapter<
             resolveSocketContext,
             joinedChannelsBySocketId
           );
-        });
+        };
         const disconnectHandler = () => {
-          disconnectHandlersBySocketId.delete(socket.id);
+          socketHandlersBySocketId.delete(socket.id);
           void cleanupSocketIoConnection(
             socket.id,
             contextBySocketId,
@@ -339,7 +364,15 @@ export function createSocketIoServerAdapter<
           );
         };
 
-        disconnectHandlersBySocketId.set(socket.id, disconnectHandler);
+        socketHandlersBySocketId.set(socket.id, {
+          command: commandHandler,
+          join: joinHandler,
+          leave: leaveHandler,
+          disconnect: disconnectHandler
+        });
+        socket.on(commandEvent, commandHandler);
+        socket.on(joinEvent, joinHandler);
+        socket.on(leaveEvent, leaveHandler);
         socket.on("disconnect", disconnectHandler);
       })
       .catch(() => {
@@ -362,13 +395,17 @@ export function createSocketIoServerAdapter<
 
       isDisposed = true;
       namespace.off("connection", connectionHandler);
+      removeSocketIoNamespaceMiddleware(namespace, connectionMiddleware);
 
       for (const socket of namespace.sockets.values()) {
-        const disconnectHandler = disconnectHandlersBySocketId.get(socket.id);
+        const handlers = socketHandlersBySocketId.get(socket.id);
 
-        if (disconnectHandler !== undefined) {
-          socket.off("disconnect", disconnectHandler);
-          disconnectHandlersBySocketId.delete(socket.id);
+        if (handlers !== undefined) {
+          socket.off(commandEvent, handlers.command);
+          socket.off(joinEvent, handlers.join);
+          socket.off(leaveEvent, handlers.leave);
+          socket.off("disconnect", handlers.disconnect);
+          socketHandlersBySocketId.delete(socket.id);
           void cleanupSocketIoConnection(
             socket.id,
             contextBySocketId,
@@ -376,10 +413,6 @@ export function createSocketIoServerAdapter<
             options.runtime
           );
         }
-
-        socket.removeAllListeners(commandEvent);
-        socket.removeAllListeners(joinEvent);
-        socket.removeAllListeners(leaveEvent);
         socket.disconnect(true);
       }
 
@@ -446,9 +479,9 @@ export function createSocketIoEventDeliverer(
   }
 
   return async (delivery) => {
-    const roomId = readSocketIoRouteRoomId(delivery.route);
+    const targetId = readSocketIoDeliveryTarget(delivery.route);
 
-    io.to(roomId).emit(
+    io.to(targetId).emit(
       delivery.name,
       delivery.payload,
       createSocketIoTransportEventRoute(delivery.route)
@@ -816,7 +849,7 @@ function readSocketIoChannelRequest(
   return request as SocketIoChannelRequest;
 }
 
-function readSocketIoRouteRoomId(route: ServerEventRoute): string {
+function readSocketIoDeliveryTarget(route: ServerEventRoute): string {
   if (route.target === SOCKET_IO_SOCKET_ROUTE_TARGET) {
     const socketId = route.metadata?.socketId;
 
@@ -828,13 +861,15 @@ function readSocketIoRouteRoomId(route: ServerEventRoute): string {
   }
 
   if (route.target === SOCKET_IO_CHANNEL_ROUTE_TARGET) {
-    const roomId = route.metadata?.roomId;
+    const memberId = route.metadata?.memberId;
 
-    if (typeof roomId !== "string" || roomId.length === 0) {
-      throw new TypeError("Socket.IO channel routes require a non-empty roomId.");
+    if (typeof memberId !== "string" || memberId.length === 0) {
+      throw new TypeError(
+        "Socket.IO channel routes must be resolved to a concrete memberId before delivery."
+      );
     }
 
-    return roomId;
+    return memberId;
   }
 
   throw new TypeError(`Unsupported Socket.IO route target: ${route.target}.`);
@@ -855,11 +890,17 @@ function createSocketIoTransportEventRoute(route: ServerEventRoute): {
       throw new TypeError("Socket.IO channel routes require a non-empty channelId.");
     }
 
-    if (route.metadata !== undefined) {
+    const metadata = omitSocketIoTransportRouteMetadata(route.metadata, [
+      "channelId",
+      "memberId",
+      "roomId"
+    ]);
+
+    if (metadata !== undefined) {
       return Object.freeze({
         target: route.target,
         channelId,
-        metadata: route.metadata
+        metadata
       });
     }
 
@@ -869,10 +910,14 @@ function createSocketIoTransportEventRoute(route: ServerEventRoute): {
     });
   }
 
-  if (route.metadata !== undefined) {
+  const metadata = omitSocketIoTransportRouteMetadata(route.metadata, [
+    "socketId"
+  ]);
+
+  if (metadata !== undefined) {
     return Object.freeze({
       target: route.target,
-      metadata: route.metadata
+      metadata
     });
   }
 
@@ -899,6 +944,47 @@ function readRequestName(
 function assertNonEmptyString(value: string, label: string): void {
   if (value.trim().length === 0) {
     throw new TypeError(`${label} must be a non-empty string.`);
+  }
+}
+
+function omitSocketIoTransportRouteMetadata(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  keysToOmit: readonly string[]
+): Readonly<Record<string, unknown>> | undefined {
+  if (metadata === undefined) {
+    return undefined;
+  }
+
+  const entries = Object.entries(metadata).filter(
+    ([key]) => !keysToOmit.includes(key)
+  );
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function removeSocketIoNamespaceMiddleware(
+  namespace: ReturnType<SocketIoServer["of"]>,
+  middleware: (
+    socket: SocketIoSocket,
+    next: (error?: Error) => void
+  ) => void
+): void {
+  const middlewareBucket = ((namespace as unknown) as {
+    _fns?: unknown[];
+  })._fns;
+
+  if (!Array.isArray(middlewareBucket)) {
+    return;
+  }
+
+  const middlewareIndex = middlewareBucket.indexOf(middleware);
+
+  if (middlewareIndex >= 0) {
+    middlewareBucket.splice(middlewareIndex, 1);
   }
 }
 

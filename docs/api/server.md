@@ -44,6 +44,7 @@ Full public API reference for the server runtime and its official subpath export
 - `ServerEventDeliverers`: Набор deliverer-ов событий, зарегистрированных в runtime.
 - `ServerEventDelivery`: Финальная delivery-запись конкретного server event.
 - `ServerEventEmission`: Server-specific execution context для event emission pipeline.
+- `ServerEventRecipient`: Конкретный получатель delivery после fan-out channel audience до участника.
 - `ServerEventRoute`: Нормализованная route-запись event emission pipeline.
 - `ServerEventRouter`: Typed router для event emission pipeline.
 - `ServerEventRouters`: Набор router-ов событий, зарегистрированных в runtime.

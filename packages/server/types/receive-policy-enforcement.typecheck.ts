@@ -10,6 +10,7 @@ import {
 } from "@liverail/contracts";
 import {
   createServerRuntime,
+  type ServerEventRecipient,
   type ServerEventRoute
 } from "../src/index.js";
 
@@ -33,7 +34,9 @@ const canReceiveMessageCreated = receivePolicy<
   "can-receive-message-created",
   typeof messageCreated,
   { role: "member" | "guest" },
-  ServerEventRoute
+  ServerEventRoute,
+  "forbidden",
+  ServerEventRecipient<{ role: "member" | "guest" }>
 >("can-receive-message-created", {
   evaluate: (execution) => {
     type ShouldTypeReceivePolicyExecution = Assert<
@@ -45,11 +48,14 @@ const canReceiveMessageCreated = receivePolicy<
           readonly payload: EventPayload<typeof messageCreated>;
           readonly route: ServerEventRoute;
           readonly context: { role: "member" | "guest" };
+          readonly recipient?: ServerEventRecipient<{
+            role: "member" | "guest";
+          }>;
         }
       >
     >;
 
-    return execution.context.role === "member";
+    return execution.recipient?.context.role === "member";
   }
 });
 const runtime = createServerRuntime<{ role: "member" | "guest" }, typeof registry>(
@@ -76,7 +82,9 @@ type ShouldAcceptTypedReceivePolicies = Assert<
       "can-receive-message-created",
       typeof messageCreated,
       { role: "member" | "guest" },
-      ServerEventRoute
+      ServerEventRoute,
+      "forbidden",
+      ServerEventRecipient<{ role: "member" | "guest" }>
     >
   >
 >;
@@ -103,6 +111,9 @@ type ShouldReturnTypedDeliveriesAfterReceivePolicies = Assert<
         readonly payload: EventPayload<typeof messageCreated>;
         readonly route: ServerEventRoute;
         readonly context: { role: "member" | "guest" };
+        readonly recipient?: ServerEventRecipient<{
+          role: "member" | "guest";
+        }>;
       }[]
     >
   >
@@ -130,6 +141,9 @@ pendingReport.then((report) => {
         readonly payload: EventPayload<typeof messageCreated>;
         readonly route: ServerEventRoute;
         readonly context: { role: "member" | "guest" };
+        readonly recipient?: ServerEventRecipient<{
+          role: "member" | "guest";
+        }>;
       }[]
     >
   >;

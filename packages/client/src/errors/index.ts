@@ -12,7 +12,19 @@ export function reportClientRuntimeError(
   error: LiveRailRealtimeError,
   onError: ClientRuntimeErrorHandler | undefined
 ): void {
-  onError?.(error);
+  if (onError === undefined) {
+    return;
+  }
+
+  try {
+    onError(error);
+  } catch (handlerError) {
+    console.error(
+      "[LiveRail] Client runtime error handler failed while handling a runtime error.",
+      handlerError,
+      error
+    );
+  }
 }
 
 /**

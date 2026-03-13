@@ -32,6 +32,7 @@ export type {
   ServerEventDeliverers,
   ServerEventDelivery,
   ServerEventEmission,
+  ServerEventRecipient,
   ServerEventRoute,
   ServerEventRouter,
   ServerEventRouters,

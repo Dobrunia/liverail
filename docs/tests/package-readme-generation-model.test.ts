@@ -26,14 +26,14 @@ type ReadmeGenerationModel = {
 
 /**
  * Проверяет, что в репозитории есть единая machine-readable модель генерации
- * package README именно для `server` и `client`, а не набор ручных markdown-
+ * package README для всех трех публичных пакетов, а не набор ручных markdown-
  * соглашений, разбросанных по файлам.
  * Это важно, потому что дальше README должны собираться воспроизводимо из
  * официального public API и metadata, без случайного захвата внутренних файлов.
- * Также учитывается corner case с `contracts`: этот пакет должен остаться вне
- * модели package README, потому что для него отдельный пакетный README не нужен.
+ * Также учитывается corner case с shared boundary: `contracts` должен идти
+ * через тот же генератор, чтобы publishable пакет не оставался без README.
  */
-test("should define a machine-readable README generation model for the server and client packages", () => {
+test("should define a machine-readable README generation model for every public package", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");
   const model = JSON.parse(
     readFileSync(
@@ -50,9 +50,19 @@ test("should define a machine-readable README generation model for the server an
     metadata: "docs-metadata"
   });
   assert.deepEqual(Object.keys(model.packages), [
+    "@liverail/contracts",
     "@liverail/server",
     "@liverail/client"
   ]);
+  assert.deepEqual(model.packages["@liverail/contracts"], {
+    packageJsonPath: "packages/contracts/package.json",
+    outputPath: "packages/contracts/README.md",
+    sourceEntrypoints: [
+      "packages/contracts/src/index.ts"
+    ],
+    entryExportPaths: ["."],
+    metadataPath: "docs/metadata/contracts.package-readme.json"
+  });
   assert.deepEqual(model.packages["@liverail/server"], {
     packageJsonPath: "packages/server/package.json",
     outputPath: "packages/server/README.md",
