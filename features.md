@@ -354,7 +354,7 @@
 
 ### 9.1 Socket.IO server adapter
 
-- [ ] **Socket.IO server adapter**
+- [x] **Socket.IO server adapter**
       **Описание:** первый реальный transport adapter для сервера.
       **Что делает:** связывает server runtime с реальным transport.
       **Зачем нужна:** нужен боевой runtime для MVP.
@@ -365,7 +365,7 @@
 
 ### 9.2 Socket.IO client adapter
 
-- [ ] **Socket.IO client adapter**
+- [x] **Socket.IO client adapter**
       **Описание:** первый transport adapter для клиента.
       **Что делает:** связывает client runtime с реальным transport.
       **Зачем нужна:** без него клиентская часть не будет реально работать.
@@ -376,7 +376,7 @@
 
 ### 9.3 Unified connection context injection
 
-- [ ] **Unified connection context injection**
+- [x] **Unified connection context injection**
       **Описание:** единый способ строить connection/session context из transport layer.
       **Что делает:** делает connect, policies и handlers независимыми от конкретного transport API.
       **Зачем нужна:** иначе логика начнет зависеть от Socket.IO specifics.
@@ -502,6 +502,17 @@
        **Архитектурные нюансы:** cleanup должен быть встроен в lifecycle runtime, а не оставаться на ответственности конечного пользователя. Нужно различать ручной unsubscribe, cleanup при disconnect и cleanup при reconnect.  
        **Не забыть обновить:** typed channel subscription API, typed event listener API, channel membership runtime, client connection lifecycle model, server lifecycle hooks.  
        **Почему здесь:** это закрывает важный operational-gap между подпиской, reconnect и lifecycle-моделью.
+
+       ### 10B.8 Package boundary and tree-shaking safety
+
+- [ ] **Package boundary and tree-shaking safety**  
+       **Описание:** проверка и настройка структуры пакетов так, чтобы каждый пакет тянул только действительно нужный код и зависимости.  
+       **Что делает:** гарантирует, что `client` не импортирует `server`, `server` не тянет клиентский runtime, а `contracts` остается легким shared-пакетом без лишних runtime-зависимостей. Также делает публичные entrypoints и сборку совместимыми с tree shaking.  
+       **Зачем нужна:** без этого монорепа может формально быть разделена на пакеты, но фактически пользователь будет тянуть лишние зависимости, лишний код или неиспользуемые модули. Это особенно важно для клиентского пакета и browser bundle.  
+       **Какие части затрагивает:** `contracts`, `server`, `client`, частично `scripts`, частично `docs`  
+       **Архитектурные нюансы:** нужно проверить package boundaries, `exports`, `dependencies` / `peerDependencies`, отсутствие случайных cross-imports, корректную modular build-структуру и `sideEffects` policy. Важно не сломать runtime-логику ради агрессивного tree shaking. `contracts` должен оставаться общим пакетом, который безопасно используется и клиентом, и сервером.  
+       **Не забыть обновить:** package.json всех пакетов, public exports, build config, root README и package docs, если меняется способ установки или импорта.  
+       **Почему здесь:** это operational и packaging-фича, которая становится особенно важной после появления нескольких пакетов и перед стабилизацией публичного API и документации.
 
 ## 11. Documentation and Local Scripts
 

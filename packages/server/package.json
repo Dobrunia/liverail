@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,6 +15,7 @@
     }
   },
   "dependencies": {
-    "@liverail/contracts": "0.0.0"
+    "@liverail/contracts": "0.0.0",
+    "socket.io": "^4.8.3"
   }
 }
