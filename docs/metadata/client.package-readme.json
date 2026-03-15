@@ -1,6 +1,6 @@
 {
-  "packageName": "@dobrunia-liverail/client",
-  "title": "@dobrunia-liverail/client",
+  "packageName": "dobrunia-liverail-client",
+  "title": "dobrunia-liverail-client",
   "summary": "Client runtime for typed commands, subscriptions and reconnect-safe event flow.",
   "sections": [
     {

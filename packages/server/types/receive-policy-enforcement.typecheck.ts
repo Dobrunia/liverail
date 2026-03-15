@@ -7,7 +7,7 @@ import {
   type EventPayload,
   type RealtimeErrorPayload,
   type ReceivePolicyContract
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime,
   type ServerEventRecipient,

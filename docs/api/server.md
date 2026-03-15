@@ -1,4 +1,4 @@
-# @dobrunia-liverail/server API Reference
+# dobrunia-liverail-server API Reference
 
 > Generated file. Do not edit manually.
 
@@ -6,7 +6,7 @@
 
 Full public API reference for the server runtime and its official subpath exports.
 
-## Entrypoint `@dobrunia-liverail/server`
+## Entrypoint `dobrunia-liverail-server`
 
 ### Values
 
@@ -60,7 +60,7 @@ Full public API reference for the server runtime and its official subpath export
 - `ServerRuntimeContext`: Официальный unified runtime context серверной части.
 - `ServerRuntimeContextInit`: Transport-level данные, которых достаточно для построения unified context.
 
-## Entrypoint `@dobrunia-liverail/server/socket-io`
+## Entrypoint `dobrunia-liverail-server/socket-io`
 
 ### Values
 

@@ -1,5 +1,5 @@
 {
-  "name": "@dobrunia-liverail/server",
+  "name": "dobrunia-liverail-server",
   "version": "1.0.0",
   "private": false,
   "type": "module",
@@ -41,7 +41,7 @@
     }
   },
   "dependencies": {
-    "@dobrunia-liverail/contracts": "^1.0.0"
+    "dobrunia-liverail-contracts": "^1.0.0"
   },
   "peerDependencies": {
     "socket.io": "^4.8.3"

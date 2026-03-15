@@ -10,9 +10,9 @@ so commands, events, channels and lifecycle behavior stay explicit and typed.
 
 | Package | Role | Status |
 | --- | --- | --- |
-| [@dobrunia-liverail/contracts](./packages/contracts) | Shared contracts, validation, errors and registry primitives | Shared foundation |
-| [@dobrunia-liverail/server](./packages/server) | Server runtime, policies, lifecycle hooks and transport adapters | Runtime package |
-| [@dobrunia-liverail/client](./packages/client) | Client runtime, subscriptions, reconnect flow and event appliers | Runtime package |
+| [dobrunia-liverail-contracts](./packages/contracts) | Shared contracts, validation, errors and registry primitives | Shared foundation |
+| [dobrunia-liverail-server](./packages/server) | Server runtime, policies, lifecycle hooks and transport adapters | Runtime package |
+| [dobrunia-liverail-client](./packages/client) | Client runtime, subscriptions, reconnect flow and event appliers | Runtime package |
 
 ## Quick Links
 

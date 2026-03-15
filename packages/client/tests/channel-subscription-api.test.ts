@@ -8,7 +8,7 @@ import {
   createContractRegistry,
   createRealtimeError,
   isRealtimeError
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createClientRuntime } from "../src/index.ts";
 
 /**

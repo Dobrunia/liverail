@@ -5,16 +5,16 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@dobrunia-liverail/contracts": [
+      "dobrunia-liverail-contracts": [
         "../contracts/src/index.ts"
       ],
-      "@dobrunia-liverail/server": [
+      "dobrunia-liverail-server": [
         "../server/src/index.ts"
       ],
-      "@dobrunia-liverail/contracts": [
+      "dobrunia-liverail-contracts": [
         "../contracts/src/index.ts"
       ],
-      "@dobrunia-liverail/server": [
+      "dobrunia-liverail-server": [
         "../server/src/index.ts"
       ]
     },

@@ -11,7 +11,7 @@ import {
   command,
   connectPolicy,
   createContractRegistry
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime,
   type ServerRuntimeContext

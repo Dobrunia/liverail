@@ -6,7 +6,7 @@ import {
   createContractRegistry,
   defineChannels,
   defineCommands
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

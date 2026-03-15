@@ -16,7 +16,7 @@ test("should provide a generated overview README for the contracts package based
     "utf8"
   );
 
-  assert.match(readme, /^# @dobrunia-liverail\/contracts$/m);
+  assert.match(readme, /^# dobrunia-liverail-contracts$/m);
   assert.match(readme, /^> Generated file\. Do not edit manually\.$/m);
   assert.match(readme, /^## Overview$/m);
   assert.match(readme, /^## Public Entry Points$/m);

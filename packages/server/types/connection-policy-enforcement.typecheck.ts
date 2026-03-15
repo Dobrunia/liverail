@@ -2,7 +2,7 @@ import {
   connectPolicy,
   createContractRegistry,
   type ConnectPolicyContract
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

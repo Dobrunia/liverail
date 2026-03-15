@@ -1,4 +1,4 @@
-import type { LiveRailRealtimeError } from "@dobrunia-liverail/contracts";
+import type { LiveRailRealtimeError } from "dobrunia-liverail-contracts";
 
 /**
  * Централизованный обработчик нормализованных ошибок client runtime.

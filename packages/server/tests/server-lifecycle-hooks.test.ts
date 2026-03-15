@@ -9,7 +9,7 @@ import { z } from "zod";
 import {
   channel,
   createContractRegistry
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime
 } from "../src/index.ts";

@@ -8,7 +8,7 @@ import {
   defineCommands,
   defineEvents,
   event
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createClientRuntime } from "../src/index.js";
 
 /**

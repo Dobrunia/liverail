@@ -2,7 +2,7 @@ export {
   createServerRuntime,
   defineServerRuntime
 } from "./runtime/index.ts";
-export type { ContractRegistryIntrospection } from "@dobrunia-liverail/contracts";
+export type { ContractRegistryIntrospection } from "dobrunia-liverail-contracts";
 export { createServerRuntimeContext } from "./context/index.ts";
 export type {
   ChannelMembership,

@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   createContractRegistry,
   event
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createClientRuntime,
   eventApplier,

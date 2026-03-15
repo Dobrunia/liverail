@@ -13,7 +13,7 @@ import {
   createRealtimeError,
   event,
   isRealtimeError
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime
 } from "../../server/src/index.ts";

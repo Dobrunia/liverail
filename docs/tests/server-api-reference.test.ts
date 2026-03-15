@@ -29,7 +29,7 @@ function readExports(sourcePath: string): string[] {
  * Это важно, потому что этот файл нужен и человеку, и LLM как полный справочник
  * по реально доступному публичному API, без обращения к внутренним исходникам.
  * Также учитывается corner case с package boundaries: reference не должен
- * ссылаться на `src/*`, а должен описывать только `@dobrunia-liverail/server` entrypoints.
+ * ссылаться на `src/*`, а должен описывать только `dobrunia-liverail-server` entrypoints.
  */
 test("should list every public server export in the generated API reference", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");
@@ -44,10 +44,10 @@ test("should list every public server export in the generated API reference", ()
     path.resolve(repositoryRoot, "packages/server/src/socket-io-entry.ts")
   );
 
-  assert.match(reference, /^# @dobrunia-liverail\/server API Reference$/m);
+  assert.match(reference, /^# dobrunia-liverail-server API Reference$/m);
   assert.match(reference, /^> Generated file\. Do not edit manually\.$/m);
-  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/server`$/m);
-  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/server\/socket-io`$/m);
+  assert.match(reference, /^## Entrypoint `dobrunia-liverail-server`$/m);
+  assert.match(reference, /^## Entrypoint `dobrunia-liverail-server\/socket-io`$/m);
 
   for (const exportName of [...mainExports, ...socketIoExports]) {
     assert.match(reference, new RegExp(`\\\`${exportName}\\\``));

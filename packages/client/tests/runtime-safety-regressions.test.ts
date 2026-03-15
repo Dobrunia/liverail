@@ -9,7 +9,7 @@ import {
   createContractRegistry,
   event,
   isRealtimeError
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createClientRuntime,
   type ClientTransportConnectionReceiver,

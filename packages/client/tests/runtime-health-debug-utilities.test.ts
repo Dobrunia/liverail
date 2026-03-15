@@ -7,7 +7,7 @@ import {
   channel,
   createContractRegistry,
   event
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createClientRuntime,
   eventApplier,

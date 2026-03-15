@@ -59,11 +59,11 @@ test("should define a machine-readable full API reference generation model for e
     exclude: ["internal-files", "tests", "types-directories"]
   });
   assert.deepEqual(Object.keys(model.packages), [
-    "@dobrunia-liverail/contracts",
-    "@dobrunia-liverail/server",
-    "@dobrunia-liverail/client"
+    "dobrunia-liverail-contracts",
+    "dobrunia-liverail-server",
+    "dobrunia-liverail-client"
   ]);
-  assert.deepEqual(model.packages["@dobrunia-liverail/contracts"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-contracts"], {
     packageJsonPath: "packages/contracts/package.json",
     outputPath: "docs/api/contracts.md",
     sourceEntrypoints: [
@@ -72,7 +72,7 @@ test("should define a machine-readable full API reference generation model for e
     entryExportPaths: ["."],
     metadataPath: "docs/metadata/contracts.api-reference.json"
   });
-  assert.deepEqual(model.packages["@dobrunia-liverail/server"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-server"], {
     packageJsonPath: "packages/server/package.json",
     outputPath: "docs/api/server.md",
     sourceEntrypoints: [
@@ -82,7 +82,7 @@ test("should define a machine-readable full API reference generation model for e
     entryExportPaths: [".", "./socket-io"],
     metadataPath: "docs/metadata/server.api-reference.json"
   });
-  assert.deepEqual(model.packages["@dobrunia-liverail/client"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-client"], {
     packageJsonPath: "packages/client/package.json",
     outputPath: "docs/api/client.md",
     sourceEntrypoints: [

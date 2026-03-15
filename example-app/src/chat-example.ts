@@ -6,22 +6,22 @@ import {
   command,
   createContractRegistry,
   event
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createClientRuntime,
   type ClientRuntime
-} from "@dobrunia-liverail/client";
-import { createSocketIoClientTransport } from "@dobrunia-liverail/client/socket-io";
+} from "dobrunia-liverail-client";
+import { createSocketIoClientTransport } from "dobrunia-liverail-client/socket-io";
 import {
   createServerRuntime,
   type ServerRuntime
-} from "@dobrunia-liverail/server";
+} from "dobrunia-liverail-server";
 import {
   createSocketIoChannelRoute,
   createSocketIoEventDeliverer,
   createSocketIoServerAdapter,
   type SocketIoServerAdapter
-} from "@dobrunia-liverail/server/socket-io";
+} from "dobrunia-liverail-server/socket-io";
 import type { Server as SocketIoServer } from "socket.io";
 
 /**

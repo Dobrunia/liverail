@@ -6,7 +6,7 @@
     "rewriteRelativeImportExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@dobrunia-liverail/contracts": [
+      "dobrunia-liverail-contracts": [
         "../contracts/dist/index.d.ts"
       ]
     },

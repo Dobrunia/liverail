@@ -16,7 +16,7 @@ import {
   createContractRegistry,
   event,
   receivePolicy
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime,
   type ServerEventRoute,

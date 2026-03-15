@@ -7,7 +7,7 @@ import {
   type CommandAckResult,
   type CommandResult,
   type CommandInput
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createClientRuntime } from "../src/index.js";
 
 /**

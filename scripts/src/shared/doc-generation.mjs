@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const PACKAGE_SOURCE_ALIASES = Object.freeze({
-  "@dobrunia-liverail/client": "packages/client/src/index.ts",
-  "@dobrunia-liverail/contracts": "packages/contracts/src/index.ts",
-  "@dobrunia-liverail/server": "packages/server/src/index.ts"
+  "dobrunia-liverail-client": "packages/client/src/index.ts",
+  "dobrunia-liverail-contracts": "packages/contracts/src/index.ts",
+  "dobrunia-liverail-server": "packages/server/src/index.ts"
 });
 
 /**

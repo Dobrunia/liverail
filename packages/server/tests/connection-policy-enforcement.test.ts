@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { connectPolicy, createContractRegistry, isRealtimeError } from "@dobrunia-liverail/contracts";
+import { connectPolicy, createContractRegistry, isRealtimeError } from "dobrunia-liverail-contracts";
 import { createServerRuntime } from "../src/index.ts";
 
 /**

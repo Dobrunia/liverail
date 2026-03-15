@@ -20,7 +20,7 @@
     ]
   },
   "packages": {
-    "@dobrunia-liverail/contracts": {
+    "dobrunia-liverail-contracts": {
       "packageJsonPath": "packages/contracts/package.json",
       "outputPath": "docs/api/contracts.md",
       "sourceEntrypoints": [
@@ -31,7 +31,7 @@
       ],
       "metadataPath": "docs/metadata/contracts.api-reference.json"
     },
-    "@dobrunia-liverail/server": {
+    "dobrunia-liverail-server": {
       "packageJsonPath": "packages/server/package.json",
       "outputPath": "docs/api/server.md",
       "sourceEntrypoints": [
@@ -44,7 +44,7 @@
       ],
       "metadataPath": "docs/metadata/server.api-reference.json"
     },
-    "@dobrunia-liverail/client": {
+    "dobrunia-liverail-client": {
       "packageJsonPath": "packages/client/package.json",
       "outputPath": "docs/api/client.md",
       "sourceEntrypoints": [

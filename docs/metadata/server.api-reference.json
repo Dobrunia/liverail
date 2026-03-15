@@ -1,6 +1,6 @@
 {
-  "packageName": "@dobrunia-liverail/server",
-  "title": "@dobrunia-liverail/server API Reference",
+  "packageName": "dobrunia-liverail-server",
+  "title": "dobrunia-liverail-server API Reference",
   "summary": "Full public API reference for the server runtime and its official subpath exports.",
   "groups": [
     {

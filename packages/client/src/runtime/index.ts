@@ -12,7 +12,7 @@ import type {
   SystemEventName,
   SystemEventPayload,
   ResolveSchemaInput
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createChannelInstance,
   createSystemEvent,
@@ -22,7 +22,7 @@ import {
   parseCommandAck,
   parseCommandInput,
   parseEventPayload
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import type {
   ClientEventListener,
   ClientSystemEventListener

@@ -8,7 +8,7 @@ import {
   event,
   isRealtimeError,
   receivePolicy
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createServerRuntime,
   type ServerEventRoute

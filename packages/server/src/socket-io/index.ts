@@ -7,7 +7,7 @@ import {
   type CommandResult,
   type ContractRegistry,
   type RealtimeErrorPayload
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import type { Server as SocketIoServer, Socket as SocketIoSocket } from "socket.io";
 
 import type {

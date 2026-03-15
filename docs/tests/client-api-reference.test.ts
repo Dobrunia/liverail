@@ -29,7 +29,7 @@ function readExports(sourcePath: string): string[] {
  * Это важно, потому что клиентский runtime содержит много transport и
  * subscription-сущностей, и LLM-friendly reference должен отражать их полностью.
  * Также покрывается corner case с package boundaries: reference описывает только
- * публичные `@dobrunia-liverail/client` entrypoints и не ссылается на внутренние `src/*`.
+ * публичные `dobrunia-liverail-client` entrypoints и не ссылается на внутренние `src/*`.
  */
 test("should list every public client export in the generated API reference", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");
@@ -44,10 +44,10 @@ test("should list every public client export in the generated API reference", ()
     path.resolve(repositoryRoot, "packages/client/src/socket-io-entry.ts")
   );
 
-  assert.match(reference, /^# @dobrunia-liverail\/client API Reference$/m);
+  assert.match(reference, /^# dobrunia-liverail-client API Reference$/m);
   assert.match(reference, /^> Generated file\. Do not edit manually\.$/m);
-  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/client`$/m);
-  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/client\/socket-io`$/m);
+  assert.match(reference, /^## Entrypoint `dobrunia-liverail-client`$/m);
+  assert.match(reference, /^## Entrypoint `dobrunia-liverail-client\/socket-io`$/m);
 
   for (const exportName of [...mainExports, ...socketIoExports]) {
     assert.match(reference, new RegExp(`\\\`${exportName}\\\``));

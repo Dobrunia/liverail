@@ -10,7 +10,7 @@ import {
   createContractRegistry,
   event,
   type CommandResult
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   createClientRuntime,
   type ClientTransport

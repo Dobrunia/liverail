@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   event,
   isRealtimeValidationError
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import {
   applyEventApplier,
   eventApplier

@@ -50,11 +50,11 @@ test("should define a machine-readable README generation model for every public 
     metadata: "docs-metadata"
   });
   assert.deepEqual(Object.keys(model.packages), [
-    "@dobrunia-liverail/contracts",
-    "@dobrunia-liverail/server",
-    "@dobrunia-liverail/client"
+    "dobrunia-liverail-contracts",
+    "dobrunia-liverail-server",
+    "dobrunia-liverail-client"
   ]);
-  assert.deepEqual(model.packages["@dobrunia-liverail/contracts"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-contracts"], {
     packageJsonPath: "packages/contracts/package.json",
     outputPath: "packages/contracts/README.md",
     sourceEntrypoints: [
@@ -63,7 +63,7 @@ test("should define a machine-readable README generation model for every public 
     entryExportPaths: ["."],
     metadataPath: "docs/metadata/contracts.package-readme.json"
   });
-  assert.deepEqual(model.packages["@dobrunia-liverail/server"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-server"], {
     packageJsonPath: "packages/server/package.json",
     outputPath: "packages/server/README.md",
     sourceEntrypoints: [
@@ -73,7 +73,7 @@ test("should define a machine-readable README generation model for every public 
     entryExportPaths: [".", "./socket-io"],
     metadataPath: "docs/metadata/server.package-readme.json"
   });
-  assert.deepEqual(model.packages["@dobrunia-liverail/client"], {
+  assert.deepEqual(model.packages["dobrunia-liverail-client"], {
     packageJsonPath: "packages/client/package.json",
     outputPath: "packages/client/README.md",
     sourceEntrypoints: [

@@ -1,6 +1,6 @@
 {
-  "name": "@dobrunia-liverail/client",
-  "version": "1.0.0",
+  "name": "dobrunia-liverail-client",
+  "version": "1.0.1",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -41,7 +41,7 @@
     }
   },
   "dependencies": {
-    "@dobrunia-liverail/contracts": "^1.0.0"
+    "dobrunia-liverail-contracts": "^1.0.0"
   },
   "peerDependencies": {
     "socket.io-client": "^4.8.3"

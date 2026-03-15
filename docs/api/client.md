@@ -1,4 +1,4 @@
-# @dobrunia-liverail/client API Reference
+# dobrunia-liverail-client API Reference
 
 > Generated file. Do not edit manually.
 
@@ -6,7 +6,7 @@
 
 Full public API reference for the client runtime and its official subpath exports.
 
-## Entrypoint `@dobrunia-liverail/client`
+## Entrypoint `dobrunia-liverail-client`
 
 ### Values
 
@@ -49,7 +49,7 @@ Full public API reference for the client runtime and its official subpath export
 - `ClientTransportEvent`: Сырой inbound event, который transport передает в client runtime.
 - `ClientTransportEventReceiver`: Обработчик inbound transport events внутри client runtime.
 
-## Entrypoint `@dobrunia-liverail/client/socket-io`
+## Entrypoint `dobrunia-liverail-client/socket-io`
 
 ### Values
 

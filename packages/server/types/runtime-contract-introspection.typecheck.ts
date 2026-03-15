@@ -4,7 +4,7 @@ import {
   command,
   createContractRegistry,
   defineCommands
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

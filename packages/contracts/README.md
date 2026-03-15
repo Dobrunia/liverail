@@ -1,4 +1,4 @@
-# @dobrunia-liverail/contracts
+# dobrunia-liverail-contracts
 
 > Generated file. Do not edit manually.
 
@@ -8,7 +8,7 @@ Shared contract layer for commands, events, channels, policies, validation and r
 
 ## Public Entry Points
 
-- `@dobrunia-liverail/contracts`: `REALTIME_ERROR_CODES`, `REALTIME_VALIDATION_ERROR_CODES`, `LiveRailRealtimeError`, `createRealtimeError`, `isRealtimeError`, `isRealtimeValidationError`, `normalizeValidationError`, `voidSchema`, `SYSTEM_EVENT_NAMES`, `createSystemEvent`, `isSystemEventName`, `COMMAND_ACK_STATUSES`, `COMMAND_RESULT_STATUSES`, `command`, `parseCommandAck`, `parseCommandInput`, `event`, `parseEventPayload`, `channel`, `createChannelInstance`, `isSameChannelInstance`, `parseChannelInstance`, `parseChannelKey`, `stringifyChannelInstance`, `POLICY_SCOPES`, `andPolicy`, `commandPolicy`, `connectPolicy`, `joinPolicy`, `notPolicy`, `orPolicy`, `policy`, `receivePolicy`, `createContractRegistry`, `defineChannels`, `defineCommands`, `defineEvents`, `definePolicies`, `inspectContractRegistry`
+- `dobrunia-liverail-contracts`: `REALTIME_ERROR_CODES`, `REALTIME_VALIDATION_ERROR_CODES`, `LiveRailRealtimeError`, `createRealtimeError`, `isRealtimeError`, `isRealtimeValidationError`, `normalizeValidationError`, `voidSchema`, `SYSTEM_EVENT_NAMES`, `createSystemEvent`, `isSystemEventName`, `COMMAND_ACK_STATUSES`, `COMMAND_RESULT_STATUSES`, `command`, `parseCommandAck`, `parseCommandInput`, `event`, `parseEventPayload`, `channel`, `createChannelInstance`, `isSameChannelInstance`, `parseChannelInstance`, `parseChannelKey`, `stringifyChannelInstance`, `POLICY_SCOPES`, `andPolicy`, `commandPolicy`, `connectPolicy`, `joinPolicy`, `notPolicy`, `orPolicy`, `policy`, `receivePolicy`, `createContractRegistry`, `defineChannels`, `defineCommands`, `defineEvents`, `definePolicies`, `inspectContractRegistry`
 
 ## Core Concepts
 

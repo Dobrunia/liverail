@@ -11,8 +11,8 @@ import {
 
 /**
  * Проверяет, что example-app действительно собирается как consumer layer
- * поверх публичных entrypoints `@dobrunia-liverail/contracts`, `@dobrunia-liverail/server`,
- * `@dobrunia-liverail/server/socket-io`, `@dobrunia-liverail/client` и `@dobrunia-liverail/client/socket-io`,
+ * поверх публичных entrypoints `dobrunia-liverail-contracts`, `dobrunia-liverail-server`,
+ * `dobrunia-liverail-server/socket-io`, `dobrunia-liverail-client` и `dobrunia-liverail-client/socket-io`,
  * а не опирается на внутренние файлы или тестовые helper-ы пакетов.
  * Это важно, потому что предыдущее ревью явно указывало на отсутствие
  * отдельного integration/example слоя и ограниченность уверенности только

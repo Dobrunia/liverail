@@ -8,7 +8,7 @@ import {
   command,
   createContractRegistry,
   event
-} from "@dobrunia-liverail/contracts";
+} from "dobrunia-liverail-contracts";
 import { createServerRuntime } from "../src/index.ts";
 
 /**
