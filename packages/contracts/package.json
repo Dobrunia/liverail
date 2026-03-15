@@ -1,10 +1,30 @@
 {
   "name": "@liverail/contracts",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "description": "Shared LiveRail contracts, schemas, errors and registry primitives.",
+  "keywords": [
+    "liverail",
+    "realtime",
+    "contracts",
+    "typesafe",
+    "zod"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dobrunia/liverail.git",
+    "directory": "packages/contracts"
+  },
+  "homepage": "https://github.com/Dobrunia/liverail/tree/main/packages/contracts",
+  "bugs": {
+    "url": "https://github.com/Dobrunia/liverail/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "files": [
     "dist",

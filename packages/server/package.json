@@ -1,13 +1,34 @@
 {
   "name": "@liverail/server",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "description": "LiveRail server runtime with policies, lifecycle hooks and adapters.",
+  "keywords": [
+    "liverail",
+    "realtime",
+    "server",
+    "socket.io",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dobrunia/liverail.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/Dobrunia/liverail/tree/main/packages/server",
+  "bugs": {
+    "url": "https://github.com/Dobrunia/liverail/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "exports": {
     ".": {

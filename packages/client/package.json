@@ -1,13 +1,34 @@
 {
   "name": "@liverail/client",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "description": "LiveRail client runtime for typed channels, commands and subscriptions.",
+  "keywords": [
+    "liverail",
+    "realtime",
+    "client",
+    "socket.io",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dobrunia/liverail.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/Dobrunia/liverail/tree/main/packages/client",
+  "bugs": {
+    "url": "https://github.com/Dobrunia/liverail/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "exports": {
     ".": {

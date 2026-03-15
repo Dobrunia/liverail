@@ -4,7 +4,12 @@
     "noEmit": false,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "paths": {},
+    "baseUrl": ".",
+    "paths": {
+      "@liverail/contracts": [
+        "../contracts/dist/index.d.ts"
+      ]
+    },
     "outDir": "./dist",
     "rootDir": "./src"
   },

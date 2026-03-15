@@ -1042,7 +1042,7 @@ export function createServerRuntime<
 >(
   options: CreateServerRuntimeOptions<TRuntimeContext, TRegistry>
 ): ServerRuntime<TRuntimeContext, TRegistry> {
-  if (options?.registry === undefined) {
+  if (options === undefined || options.registry === undefined) {
     throw new TypeError("Server runtime requires a contract registry.");
   }
 
