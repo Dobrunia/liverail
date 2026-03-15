@@ -39,9 +39,9 @@ test("should list every public contracts export in the generated API reference",
     path.resolve(repositoryRoot, "packages/contracts/src/index.ts")
   );
 
-  assert.match(reference, /^# @liverail\/contracts API Reference$/m);
+  assert.match(reference, /^# @dobrunia-liverail\/contracts API Reference$/m);
   assert.match(reference, /^> Generated file\. Do not edit manually\.$/m);
-  assert.match(reference, /^## Entrypoint `@liverail\/contracts`$/m);
+  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/contracts`$/m);
 
   for (const exportName of mainExports) {
     assert.match(reference, new RegExp(`\\\`${exportName}\\\``));

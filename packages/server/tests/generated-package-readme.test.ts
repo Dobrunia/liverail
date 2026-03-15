@@ -18,7 +18,7 @@ test("should provide a generated overview README for the server package based on
     "utf8"
   );
 
-  assert.match(readme, /^# @liverail\/server$/m);
+  assert.match(readme, /^# @dobrunia-liverail\/server$/m);
   assert.match(readme, /^> Generated file\. Do not edit manually\.$/m);
   assert.match(readme, /^## Overview$/m);
   assert.match(readme, /^## Public Entry Points$/m);
@@ -27,7 +27,7 @@ test("should provide a generated overview README for the server package based on
   assert.match(readme, /`createServerRuntime`/);
   assert.match(readme, /`defineServerRuntime`/);
   assert.match(readme, /`createServerRuntimeContext`/);
-  assert.match(readme, /`@liverail\/server\/socket-io`/);
+  assert.match(readme, /`@dobrunia-liverail\/server\/socket-io`/);
   assert.match(readme, /lifecycle hooks/i);
   assert.doesNotMatch(readme, /src\/runtime\/index\.ts/);
   assert.doesNotMatch(readme, /src\/socket-io\/index\.ts/);

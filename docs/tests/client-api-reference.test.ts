@@ -44,10 +44,10 @@ test("should list every public client export in the generated API reference", ()
     path.resolve(repositoryRoot, "packages/client/src/socket-io-entry.ts")
   );
 
-  assert.match(reference, /^# @liverail\/client API Reference$/m);
+  assert.match(reference, /^# @dobrunia-liverail\/client API Reference$/m);
   assert.match(reference, /^> Generated file\. Do not edit manually\.$/m);
-  assert.match(reference, /^## Entrypoint `@liverail\/client`$/m);
-  assert.match(reference, /^## Entrypoint `@liverail\/client\/socket-io`$/m);
+  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/client`$/m);
+  assert.match(reference, /^## Entrypoint `@dobrunia-liverail\/client\/socket-io`$/m);
 
   for (const exportName of [...mainExports, ...socketIoExports]) {
     assert.match(reference, new RegExp(`\\\`${exportName}\\\``));

@@ -23,9 +23,9 @@ test("should keep the root README as a short monorepo entrypoint with package li
   assert.match(readme, /^## Overview$/m);
   assert.match(readme, /^## Package Map$/m);
   assert.match(readme, /^## Quick Links$/m);
-  assert.match(readme, /\[@liverail\/contracts\]\(\.\/packages\/contracts\)/);
-  assert.match(readme, /\[@liverail\/server\]\(\.\/packages\/server\)/);
-  assert.match(readme, /\[@liverail\/client\]\(\.\/packages\/client\)/);
+  assert.match(readme, /\[@dobrunia-liverail\/contracts\]\(\.\/packages\/contracts\)/);
+  assert.match(readme, /\[@dobrunia-liverail\/server\]\(\.\/packages\/server\)/);
+  assert.match(readme, /\[@dobrunia-liverail\/client\]\(\.\/packages\/client\)/);
   assert.match(readme, /\[Documentation Hub\]\(\.\/docs\/README\.md\)/);
   assert.doesNotMatch(readme, /^## API Reference$/m);
 });
