@@ -1,5 +1,5 @@
 {
-  "name": "@liverail/client",
+  "name": "liverail/client",
   "version": "0.0.0",
   "private": false,
   "type": "module",

@@ -8,6 +8,7 @@
   "scripts": {
     "clean:dist": "node ./scripts/clean-dist.mjs",
     "build": "npm run clean:dist && tsc -p packages/contracts/tsconfig.build.json && tsc -p packages/server/tsconfig.build.json && tsc -p packages/client/tsconfig.build.json",
+    "publish:all": "npm run build && npm publish -w packages/contracts --access public && npm publish -w packages/client --access public && npm publish -w packages/server --access public",
     "docs:readmes": "node ./scripts/generate-package-readmes.mjs",
     "docs:api": "node ./scripts/generate-api-references.mjs",
     "docs:generate": "npm run docs:readmes && npm run docs:api",
