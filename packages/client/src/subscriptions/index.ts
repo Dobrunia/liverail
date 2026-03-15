@@ -2,7 +2,7 @@ import {
   stringifyChannelInstance,
   type ChannelContract,
   type ChannelKey
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 
 /**
  * Активная клиентская подписка на конкретный channel instance.

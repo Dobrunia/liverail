@@ -1,6 +1,6 @@
 {
-  "packageName": "@liverail/contracts",
-  "title": "@liverail/contracts",
+  "packageName": "@dobrunia-liverail/contracts",
+  "title": "@dobrunia-liverail/contracts",
   "summary": "Shared contract layer for commands, events, channels, policies, validation and registry composition.",
   "sections": [
     {

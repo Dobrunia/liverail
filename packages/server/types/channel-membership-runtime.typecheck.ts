@@ -4,7 +4,7 @@ import {
   channel,
   createContractRegistry,
   type ChannelKey
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

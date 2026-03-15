@@ -9,7 +9,7 @@ import {
   connectPolicy,
   createContractRegistry,
   event,
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createServerRuntime } from "../src/index.ts";
 
 /**

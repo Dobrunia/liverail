@@ -7,7 +7,7 @@ import { test } from "vitest";
 /**
  * Проверяет, что main entrypoint серверного пакета не смешивает core runtime
  * с Socket.IO adapter-ом и что transport-интеграция вынесена в subpath export.
- * Это важно, потому что импорт `@liverail/server` должен оставаться core-only
+ * Это важно, потому что импорт `@dobrunia-liverail/server` должен оставаться core-only
  * и не тянуть transport dependency без явного запроса пользователя.
  * Также покрывается corner case с dependency policy, чтобы `socket.io`
  * оставался optional peer вокруг отдельного adapter entrypoint.

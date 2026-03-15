@@ -10,7 +10,7 @@ import { test } from "vitest";
  * Это важно, потому что README должен объяснять runtime, context, policies
  * и transport entrypoints рядом с пакетом, не превращаясь в dump всех типов.
  * Также учитываются corner cases с package boundaries: README обязан ссылаться
- * только на `@liverail/server` и `@liverail/server/socket-io`, а не на `src/*`.
+ * только на `@dobrunia-liverail/server` и `@dobrunia-liverail/server/socket-io`, а не на `src/*`.
  */
 test("should provide a generated overview README for the server package based on public entrypoints", () => {
   const readme = readFileSync(

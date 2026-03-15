@@ -8,7 +8,7 @@ import {
   defineCommands,
   defineEvents,
   event
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createServerRuntime,
   defineServerRuntime

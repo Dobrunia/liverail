@@ -7,9 +7,9 @@ The root README only explains the repository at a high level and links here.
 
 ## Package Documentation Map
 
-- `@liverail/contracts`: [package README](../packages/contracts/README.md) and [API reference](./api/contracts.md).
-- `@liverail/server`: [package README](../packages/server/README.md) and [API reference](./api/server.md).
-- `@liverail/client`: [package README](../packages/client/README.md) and [API reference](./api/client.md).
+- `@dobrunia-liverail/contracts`: [package README](../packages/contracts/README.md) and [API reference](./api/contracts.md).
+- `@dobrunia-liverail/server`: [package README](../packages/server/README.md) and [API reference](./api/server.md).
+- `@dobrunia-liverail/client`: [package README](../packages/client/README.md) and [API reference](./api/client.md).
 
 ## Repository Links
 

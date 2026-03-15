@@ -1,4 +1,4 @@
-import type { CommandResult } from "@liverail/contracts";
+import type { CommandResult } from "@dobrunia-liverail/contracts";
 
 /**
  * Сырой outbound command request, который client runtime отправляет в transport.

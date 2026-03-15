@@ -7,7 +7,7 @@ import { test } from "vitest";
 /**
  * Проверяет, что main entrypoint клиентского пакета не тянет Socket.IO adapter
  * и что transport-specific код вынесен в отдельный subpath export.
- * Это важно, потому что импорт `@liverail/client` не должен принуждать
+ * Это важно, потому что импорт `@dobrunia-liverail/client` не должен принуждать
  * browser bundle тащить `socket.io-client`, если используется другой transport.
  * Также покрывается corner case с dependency policy, чтобы socket client
  * оставался optional peer, а не обязательной зависимостью основного пакета.

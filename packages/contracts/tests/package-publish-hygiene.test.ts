@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "vitest";
 
 /**
- * Проверяет, что `@liverail/contracts` dry-run pack действительно включает
+ * Проверяет, что `@dobrunia-liverail/contracts` dry-run pack действительно включает
  * package README в tarball, а не оставляет publish artifact без базовой docs.
  * Это важно, потому что документация должна сопровождать именно публикуемый
  * пакет, а не только жить в репозитории.

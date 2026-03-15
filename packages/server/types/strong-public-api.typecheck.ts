@@ -6,7 +6,7 @@ import {
   defineCommands,
   type CommandAck,
   type CommandInput
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   defineServerRuntime,
   type ServerCommandExecution

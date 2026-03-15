@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   event,
   type EventPayload
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   applyEventApplier,
   eventApplier,

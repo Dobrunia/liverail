@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   channel,
   createContractRegistry
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createClientRuntime } from "../src/index.js";
 
 /**

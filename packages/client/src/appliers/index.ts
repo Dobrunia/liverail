@@ -3,7 +3,7 @@ import {
   type EventContract,
   type EventPayload,
   type ResolveSchemaInput
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 
 /**
  * Pure-функция применения typed события к текущему состоянию.

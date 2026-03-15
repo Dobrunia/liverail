@@ -4,7 +4,7 @@ import {
   createContractRegistry,
   event,
   type EventPayload
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createServerRuntime,
   type ServerEventRecipient

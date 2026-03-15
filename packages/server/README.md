@@ -1,4 +1,4 @@
-# @liverail/server
+# @dobrunia-liverail/server
 
 > Generated file. Do not edit manually.
 
@@ -8,8 +8,8 @@ Server runtime for contract-driven realtime applications.
 
 ## Public Entry Points
 
-- `@liverail/server`: `createServerRuntime`, `defineServerRuntime`, `createServerRuntimeContext`
-- `@liverail/server/socket-io`: `SOCKET_IO_CHANNEL_JOIN_EVENT`, `SOCKET_IO_CHANNEL_LEAVE_EVENT`, `SOCKET_IO_COMMAND_EVENT`, `createSocketIoChannelRoute`, `createSocketIoEventDeliverer`, `createSocketIoServerAdapter`, `createSocketIoSocketRoute`, `getSocketIoChannelRoom`
+- `@dobrunia-liverail/server`: `createServerRuntime`, `defineServerRuntime`, `createServerRuntimeContext`
+- `@dobrunia-liverail/server/socket-io`: `SOCKET_IO_CHANNEL_JOIN_EVENT`, `SOCKET_IO_CHANNEL_LEAVE_EVENT`, `SOCKET_IO_COMMAND_EVENT`, `createSocketIoChannelRoute`, `createSocketIoEventDeliverer`, `createSocketIoServerAdapter`, `createSocketIoSocketRoute`, `getSocketIoChannelRoom`
 
 ## Core Concepts
 

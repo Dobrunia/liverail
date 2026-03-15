@@ -1,6 +1,6 @@
 {
-  "packageName": "@liverail/contracts",
-  "title": "@liverail/contracts API Reference",
+  "packageName": "@dobrunia-liverail/contracts",
+  "title": "@dobrunia-liverail/contracts API Reference",
   "summary": "Full public API reference for the shared contract, validation, policy and registry layer.",
   "groups": [
     {

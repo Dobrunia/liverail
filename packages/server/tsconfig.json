@@ -5,7 +5,10 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@liverail/contracts": [
+      "@dobrunia-liverail/contracts": [
+        "../contracts/src/index.ts"
+      ],
+      "@dobrunia-liverail/contracts": [
         "../contracts/src/index.ts"
       ]
     },

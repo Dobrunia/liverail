@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { createContractRegistry, isRealtimeError } from "@liverail/contracts";
+import { createContractRegistry, isRealtimeError } from "@dobrunia-liverail/contracts";
 import {
   createClientRuntime,
   type ClientTransportConnectionReceiver

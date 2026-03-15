@@ -7,7 +7,7 @@ import {
   channel,
   command,
   createContractRegistry
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createServerRuntime,
   createServerRuntimeContext,

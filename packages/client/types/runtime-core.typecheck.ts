@@ -8,7 +8,7 @@ import {
   type ChannelContract,
   type CommandContract,
   type EventContract
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createClientRuntime, type ClientTransportEvent } from "../src/index.js";
 
 /**

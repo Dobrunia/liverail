@@ -29,7 +29,7 @@ function readExports(sourcePath: string): string[] {
  * Это важно, потому что этот файл нужен и человеку, и LLM как полный справочник
  * по реально доступному публичному API, без обращения к внутренним исходникам.
  * Также учитывается corner case с package boundaries: reference не должен
- * ссылаться на `src/*`, а должен описывать только `@liverail/server` entrypoints.
+ * ссылаться на `src/*`, а должен описывать только `@dobrunia-liverail/server` entrypoints.
  */
 test("should list every public server export in the generated API reference", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");

@@ -1,4 +1,4 @@
-# @liverail/client
+# @dobrunia-liverail/client
 
 > Generated file. Do not edit manually.
 
@@ -8,8 +8,8 @@ Client runtime for typed commands, subscriptions and reconnect-safe event flow.
 
 ## Public Entry Points
 
-- `@liverail/client`: `createClientRuntime`, `applyEventApplier`, `eventApplier`
-- `@liverail/client/socket-io`: `SOCKET_IO_CHANNEL_JOIN_EVENT`, `SOCKET_IO_CHANNEL_LEAVE_EVENT`, `SOCKET_IO_COMMAND_EVENT`, `createSocketIoClientTransport`
+- `@dobrunia-liverail/client`: `createClientRuntime`, `applyEventApplier`, `eventApplier`
+- `@dobrunia-liverail/client/socket-io`: `SOCKET_IO_CHANNEL_JOIN_EVENT`, `SOCKET_IO_CHANNEL_LEAVE_EVENT`, `SOCKET_IO_COMMAND_EVENT`, `createSocketIoClientTransport`
 
 ## Core Concepts
 

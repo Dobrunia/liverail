@@ -1,4 +1,4 @@
-# @liverail/contracts API Reference
+# @dobrunia-liverail/contracts API Reference
 
 > Generated file. Do not edit manually.
 
@@ -6,7 +6,7 @@
 
 Full public API reference for the shared contract, validation, policy and registry layer.
 
-## Entrypoint `@liverail/contracts`
+## Entrypoint `@dobrunia-liverail/contracts`
 
 ### Values
 

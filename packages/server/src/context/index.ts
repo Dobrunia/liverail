@@ -1,4 +1,4 @@
-import type { ContractMetadata, RuntimeContext } from "@liverail/contracts";
+import type { ContractMetadata, RuntimeContext } from "@dobrunia-liverail/contracts";
 
 /**
  * Transport-agnostic описание активного realtime-соединения.

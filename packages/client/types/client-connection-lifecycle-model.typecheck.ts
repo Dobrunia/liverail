@@ -1,4 +1,4 @@
-import { createContractRegistry } from "@liverail/contracts";
+import { createContractRegistry } from "@dobrunia-liverail/contracts";
 import { createClientRuntime } from "../src/index.js";
 
 /**

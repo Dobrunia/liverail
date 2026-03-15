@@ -3,7 +3,7 @@ import type {
   EventPayload,
   SystemEvent,
   SystemEventName
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 
 /**
  * Пользовательский listener конкретного typed события.

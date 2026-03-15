@@ -5,7 +5,7 @@ import {
   createContractRegistry,
   type CommandAck,
   type CommandInput
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

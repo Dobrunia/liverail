@@ -5,19 +5,34 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@liverail/contracts": [
+      "@dobrunia-liverail/contracts": [
         "../packages/contracts/src/index.ts"
       ],
-      "@liverail/server": [
+      "@dobrunia-liverail/server": [
         "../packages/server/src/index.ts"
       ],
-      "@liverail/server/socket-io": [
+      "@dobrunia-liverail/server/socket-io": [
         "../packages/server/src/socket-io-entry.ts"
       ],
-      "@liverail/client": [
+      "@dobrunia-liverail/client": [
         "../packages/client/src/index.ts"
       ],
-      "@liverail/client/socket-io": [
+      "@dobrunia-liverail/client/socket-io": [
+        "../packages/client/src/socket-io-entry.ts"
+      ],
+      "@dobrunia-liverail/contracts": [
+        "../packages/contracts/src/index.ts"
+      ],
+      "@dobrunia-liverail/server": [
+        "../packages/server/src/index.ts"
+      ],
+      "@dobrunia-liverail/server/socket-io": [
+        "../packages/server/src/socket-io-entry.ts"
+      ],
+      "@dobrunia-liverail/client": [
+        "../packages/client/src/index.ts"
+      ],
+      "@dobrunia-liverail/client/socket-io": [
         "../packages/client/src/socket-io-entry.ts"
       ]
     },

@@ -1,6 +1,6 @@
 {
-  "packageName": "@liverail/server",
-  "title": "@liverail/server",
+  "packageName": "@dobrunia-liverail/server",
+  "title": "@dobrunia-liverail/server",
   "summary": "Server runtime for contract-driven realtime applications.",
   "sections": [
     {

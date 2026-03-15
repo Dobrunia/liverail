@@ -8,7 +8,7 @@ import { z } from "zod";
 import {
   command,
   createContractRegistry
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createServerRuntime
 } from "../../server/src/index.ts";

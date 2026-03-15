@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { z } from "zod";
 
-import { channel } from "@liverail/contracts";
+import { channel } from "@dobrunia-liverail/contracts";
 import { getSocketIoChannelRoom } from "../src/socket-io-entry.ts";
 
 /**

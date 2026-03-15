@@ -7,7 +7,7 @@ import {
   parseCommandInput,
   parseEventPayload,
   stringifyChannelInstance
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import type {
   ChannelContract,
   ChannelKey,
@@ -28,7 +28,7 @@ import type {
   RealtimeErrorPayload,
   ReceivePolicyContract,
   ResolveSchemaInput
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 
 type MaybePromise<T> = T | Promise<T>;
 

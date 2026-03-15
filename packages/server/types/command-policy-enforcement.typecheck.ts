@@ -7,7 +7,7 @@ import {
   type CommandAck,
   type CommandInput,
   type CommandPolicyContract
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import { createServerRuntime } from "../src/index.js";
 
 /**

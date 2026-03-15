@@ -2,7 +2,7 @@ import {
   createRealtimeError,
   type CommandResult,
   type RealtimeErrorPayload
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   io as createSocketIoClient,
   type Socket as SocketIoClientSocket

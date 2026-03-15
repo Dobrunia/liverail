@@ -29,7 +29,7 @@ function readExports(sourcePath: string): string[] {
  * Это важно, потому что клиентский runtime содержит много transport и
  * subscription-сущностей, и LLM-friendly reference должен отражать их полностью.
  * Также покрывается corner case с package boundaries: reference описывает только
- * публичные `@liverail/client` entrypoints и не ссылается на внутренние `src/*`.
+ * публичные `@dobrunia-liverail/client` entrypoints и не ссылается на внутренние `src/*`.
  */
 test("should list every public client export in the generated API reference", () => {
   const repositoryRoot = path.resolve(import.meta.dirname, "../..");

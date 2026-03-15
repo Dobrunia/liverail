@@ -8,7 +8,7 @@ import {
   command,
   createContractRegistry,
   event
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createClientRuntime,
   eventApplier

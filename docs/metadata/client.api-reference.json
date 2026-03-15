@@ -1,6 +1,6 @@
 {
-  "packageName": "@liverail/client",
-  "title": "@liverail/client API Reference",
+  "packageName": "@dobrunia-liverail/client",
+  "title": "@dobrunia-liverail/client API Reference",
   "summary": "Full public API reference for the client runtime and its official subpath exports.",
   "groups": [
     {

@@ -10,7 +10,7 @@ import { test } from "vitest";
  * Это важно, потому что клиентская документация должна быть краткой, но
  * понятной человеку и не должна ссылаться на внутренние implementation-файлы.
  * Также учитываются corner cases с transport boundary: README обязан вести
- * к `@liverail/client` и `@liverail/client/socket-io`, а не к `src/*`.
+ * к `@dobrunia-liverail/client` и `@dobrunia-liverail/client/socket-io`, а не к `src/*`.
  */
 test("should provide a generated overview README for the client package based on public entrypoints", () => {
   const readme = readFileSync(

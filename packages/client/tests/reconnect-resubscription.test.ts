@@ -7,7 +7,7 @@ import {
   channel,
   createContractRegistry,
   isRealtimeError
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createClientRuntime,
   type ClientTransportConnectionReceiver

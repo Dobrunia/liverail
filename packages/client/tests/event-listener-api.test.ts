@@ -8,7 +8,7 @@ import {
   createContractRegistry,
   event,
   isRealtimeError
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 import {
   createClientRuntime,
   type ClientTransportEventReceiver

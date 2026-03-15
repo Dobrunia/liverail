@@ -5,7 +5,7 @@ export type {
   SystemEvent,
   SystemEventName,
   SystemEventPayload
-} from "@liverail/contracts";
+} from "@dobrunia-liverail/contracts";
 export type {
   ClientConnectionLifecycleSnapshot,
   ClientConnectionLifecycleState,
